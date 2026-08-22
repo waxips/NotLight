@@ -45,7 +45,7 @@ try {
     Write-Host "EIRTeam.FFmpeg v1.1.4 runtime restored."
 
     # Gyan.dev FFmpeg 8.1.2 Essentials CLI.
-    $FfmpegUrl = "https://www.gyan.dev/ffmpeg/builds/packages/ffmpeg-8.1.2-essentials_build.zip"
+    $FfmpegUrl = "https://github.com/GyanD/codexffmpeg/releases/download/8.1.2/ffmpeg-8.1.2-essentials_build.zip"
     $FfmpegSha = "db580001caa24ac104c8cb856cd113a87b0a443f7bdf47d8c12b1d740584a2ec"
     $FfmpegZip = Join-Path $Temp "ffmpeg-8.1.2-essentials_build.zip"
     $FfmpegExtract = Join-Path $Temp "ffmpeg-cli"
