@@ -10,7 +10,7 @@ ENGLISH
    then launch the app. Later starts reuse them.
 
 Do not launch the app from inside the ZIP. On the first start, use
-START_NOTLIGHT.bat instead of opening NotLightBoard.exe directly.
+START_NOTLIGHT.bat instead of opening NotLight.exe directly.
 
 If a school/university network blocks the first download, try another Internet
 connection and run START_NOTLIGHT.bat again.
@@ -28,7 +28,7 @@ Project channel: https://t.me/notlight_official
    При следующих запусках повторно скачивать их не потребуется.
 
 Не запускайте программу прямо из ZIP. При первом запуске используйте
-START_NOTLIGHT.bat, а не NotLightBoard.exe напрямую.
+START_NOTLIGHT.bat, а не NotLight.exe напрямую.
 
 Если школьная/университетская сеть блокирует скачивание компонентов, попробуйте
 другое подключение к интернету и снова запустите START_NOTLIGHT.bat.

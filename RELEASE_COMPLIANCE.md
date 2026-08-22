@@ -111,8 +111,8 @@ Recommended release path:
 The Windows package must contain:
 
 ```text
-NotLightBoard.exe
-NotLightBoard.pck
+NotLight.exe
+NotLight.pck
 00_START_HERE.txt
 START_NOTLIGHT.bat
 SETUP_WINDOWS_DEPENDENCIES.ps1

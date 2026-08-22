@@ -59,7 +59,7 @@ New-Item -ItemType Directory -Force -Path $dist | Out-Null
 
 $preset = "Windows Desktop"
 $exportFlag = if ($DebugBuild) { "--export-debug" } else { "--export-release" }
-$exePath = Join-Path $dist "NotLightBoard.exe"
+$exePath = Join-Path $dist "NotLight.exe"
 
 & $Godot --headless --path $root $exportFlag $preset $exePath
 if ($LASTEXITCODE -ne 0) {

@@ -12,7 +12,7 @@ QUICK START
 
 IMPORTANT
 - Do not run NotLight directly from inside the ZIP.
-- Do not copy only NotLightBoard.exe. Keep the whole extracted folder together.
+- Do not copy only NotLight.exe. Keep the whole extracted folder together.
 - The first-run dependency download is intentional. NotLight's public ZIP does not
   redistribute several third-party GPL/LGPL runtime binaries; the setup script gets
   the pinned copies directly from their providers instead.

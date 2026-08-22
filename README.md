@@ -44,7 +44,7 @@ When a Windows build is published, students, teachers, and other end users do no
 
 The public NotLight ZIP intentionally does not redistribute several large third-party GPL/LGPL runtime binaries. This makes the public package simpler to audit and keeps those binaries coming directly from their upstream providers. The ZIP includes `README_WINDOWS.txt` with the same instructions in English and Russian.
 
-Do **not** run the application from inside the ZIP and do not move only `NotLightBoard.exe`; keep the extracted folder together.
+Do **not** run the application from inside the ZIP and do not move only `NotLight.exe`; keep the extracted folder together.
 
 ### Windows requirements
 

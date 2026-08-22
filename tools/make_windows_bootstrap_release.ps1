@@ -18,11 +18,11 @@ $PackageName = "NotLight-$SafeVersion-windows-x86_64"
 $PackageDir = Join-Path $OutputRoot $PackageName
 $ZipPath = Join-Path $OutputRoot ($PackageName + ".zip")
 
-if (-not (Test-Path -LiteralPath (Join-Path $BuildDir "NotLightBoard.exe") -PathType Leaf)) {
-    throw "Build directory does not contain NotLightBoard.exe: $BuildDir"
+if (-not (Test-Path -LiteralPath (Join-Path $BuildDir "NotLight.exe") -PathType Leaf)) {
+    throw "Build directory does not contain NotLight.exe: $BuildDir"
 }
-if (-not (Test-Path -LiteralPath (Join-Path $BuildDir "NotLightBoard.pck") -PathType Leaf)) {
-    throw "Build directory does not contain NotLightBoard.pck: $BuildDir"
+if (-not (Test-Path -LiteralPath (Join-Path $BuildDir "NotLight.pck") -PathType Leaf)) {
+    throw "Build directory does not contain NotLight.pck: $BuildDir"
 }
 
 if (Test-Path -LiteralPath $PackageDir) { Remove-Item -LiteralPath $PackageDir -Recurse -Force }
@@ -57,7 +57,7 @@ $ReleaseManifest = [ordered]@{
     schema = "notlight.public-windows-bootstrap"
     schema_version = 1
     version = $Version
-    application = "NotLightBoard.exe"
+    application = "NotLight.exe"
     starter = "START_NOTLIGHT.bat"
     downloaded_on_first_run = @(
         "EIRTeam.FFmpeg v1.1.4 Windows runtime",

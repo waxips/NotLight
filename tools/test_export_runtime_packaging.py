@@ -9,7 +9,7 @@ def test_windows_export_runtime_packaging_contract() -> None:
     plugin = (ROOT / "addons/notlight_export/notlight_export_runtime_plugin.gd").read_text(encoding="utf-8")
 
     assert 'enabled=PackedStringArray("res://addons/notlight_export/plugin.cfg")' in project
-    assert 'export_path="dist/NotLightBoard.exe"' in preset
+    assert 'export_path="dist/NotLight.exe"' in preset
     for excluded in (
         "tools/ffmpeg/windows/bin/*",
         "tools/poppler/windows/Library/bin/*",

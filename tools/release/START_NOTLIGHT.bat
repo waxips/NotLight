@@ -3,8 +3,8 @@ setlocal
 cd /d "%~dp0"
 title NotLight
 
-if not exist "NotLightBoard.exe" (
-  echo NotLightBoard.exe is missing from this folder.
+if not exist "NotLight.exe" (
+  echo NotLight.exe is missing from this folder.
   echo Please extract the whole NotLight ZIP before starting the program.
   echo.
   pause
@@ -19,5 +19,5 @@ if errorlevel 1 (
   exit /b 1
 )
 
-start "" "%~dp0NotLightBoard.exe"
+start "" "%~dp0NotLight.exe"
 exit /b 0
