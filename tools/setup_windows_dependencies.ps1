@@ -64,7 +64,6 @@ try {
 
     # Poppler has its own pinned downloader + dependency-closure reducer.
     & (Join-Path $Root "tools\poppler\refresh_windows_runtime.ps1") -ProjectRoot $Root
-    if ($LASTEXITCODE -ne 0) { throw "Poppler setup failed." }
 
     # Typst 0.15.1 Windows compiler. MiTeX package material is already committed.
     $TypstUrl = "https://github.com/typst/typst/releases/download/v0.15.1/typst-x86_64-pc-windows-msvc.zip"
