@@ -103,7 +103,8 @@ try {
         $Relative = $File.FullName.Substring($PopplerRoot.Length).TrimStart("\").Replace("\", "/")
         $HashLines += "$Hash  $Relative"
     }
-    [System.IO.File]::WriteAllLines($HashesPath, $HashLines, [System.Text.UTF8Encoding]::new($false))
+    $HashText = (($HashLines -join "`n") + "`n")
+    [System.IO.File]::WriteAllText($HashesPath, $HashText, [System.Text.UTF8Encoding]::new($false))
 
     Write-Host "Poppler runtime refreshed and verified."
     Write-Host "Archive SHA-256: $ActualSha256"

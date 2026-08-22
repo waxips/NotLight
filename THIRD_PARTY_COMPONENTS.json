@@ -123,7 +123,7 @@
       "repository_presence": "downloaded-runtime",
       "upstream_asset": "ffmpeg-8.1.2-essentials_build.zip",
       "upstream_asset_sha256": "db580001caa24ac104c8cb856cd113a87b0a443f7bdf47d8c12b1d740584a2ec",
-      "download_url": "https://www.gyan.dev/ffmpeg/builds/packages/ffmpeg-8.1.2-essentials_build.zip",
+      "download_url": "https://github.com/GyanD/codexffmpeg/releases/download/8.1.2/ffmpeg-8.1.2-essentials_build.zip",
       "public_windows_package_presence": "not-included; installed by START_NOTLIGHT.bat from pinned upstream download",
       "public_windows_release_action": "Do not place this downloaded runtime object code in the public NotLight ZIP. The first-run installer downloads the pinned upstream archive and verifies it on the recipient machine."
     },

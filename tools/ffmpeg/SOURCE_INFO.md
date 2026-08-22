@@ -8,7 +8,7 @@ NotLight uses `ffmpeg.exe` and `ffprobe.exe` as external command-line tools for 
 - Variant: **release essentials**, Windows x86_64, static GPLv3 build
 - FFmpeg release: **8.1.2**
 - Provider package: `ffmpeg-8.1.2-essentials_build.zip`
-- Download URL: `https://www.gyan.dev/ffmpeg/builds/packages/ffmpeg-8.1.2-essentials_build.zip`
+- Download URL: `https://github.com/GyanD/codexffmpeg/releases/download/8.1.2/ffmpeg-8.1.2-essentials_build.zip`
 - Provider package SHA-256: `db580001caa24ac104c8cb856cd113a87b0a443f7bdf47d8c12b1d740584a2ec`
 - FFmpeg source release/tag: `n8.1.2` in the upstream FFmpeg repository
 
