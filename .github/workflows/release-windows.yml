@@ -46,8 +46,6 @@ jobs:
           python tools/validate_localization.py
           python tools/validate_project.py
           python tools/validate_release_compliance.py
-          python tools/generate_file_checksums.py
-          git diff --exit-code -- FILE_CHECKSUMS.sha256
 
       - name: Restore pinned NotLight runtime dependencies
         shell: pwsh

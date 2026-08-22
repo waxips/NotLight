@@ -26,10 +26,7 @@ python -B -m pytest -q -p no:cacheprovider
 python tools/validate_localization.py
 python tools/validate_project.py
 python tools/validate_release_compliance.py
-python tools/generate_file_checksums.py
 ```
-
-Commit the resulting `FILE_CHECKSUMS.sha256`.
 
 ## 2. EIRTeam provenance — resolved
 

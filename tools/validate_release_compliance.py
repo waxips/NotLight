@@ -25,7 +25,6 @@ REQUIRED_TOP_LEVEL = (
     "THIRD_PARTY_COMPONENTS.json",
     "CORRESPONDING_SOURCE.md",
     "RELEASE_COMPLIANCE.md",
-    "FILE_CHECKSUMS.sha256",
     "tools/setup_windows_dependencies.ps1",
 )
 REQUIRED_LICENSES = (

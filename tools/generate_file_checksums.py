@@ -9,7 +9,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 OUTPUT = ROOT / "FILE_CHECKSUMS.sha256"
-EXCLUDED_DIR_NAMES = {".git", ".godot", ".pytest_cache", "__pycache__", "dist", "build_wow"}
+EXCLUDED_DIR_NAMES = {".git", ".godot", ".pytest_cache", "__pycache__", "dist", "build_wow", "release_out", ".godot-ci", ".godot-template-unpack"}
 EXCLUDED_FILES = {OUTPUT.resolve()}
 EXCLUDED_PATH_PREFIXES = (
     Path("addons/ffmpeg/win64"),

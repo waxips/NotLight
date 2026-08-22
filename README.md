@@ -240,22 +240,6 @@ For downloadable releases, publish source material alongside the binary release 
 
 The concrete release-time checklist is in [`RELEASE_COMPLIANCE.md`](RELEASE_COMPLIANCE.md).
 
-## Source archive integrity
-
-`FILE_CHECKSUMS.sha256` is generated from the clean source-release tree. It intentionally excludes generated/cache/build directories such as `.godot/`, `.pytest_cache/`, `__pycache__/`, and `dist/`, as well as the checksum file itself.
-
-Regenerate after release-source changes:
-
-```bash
-python tools/generate_file_checksums.py
-```
-
-On systems with GNU `sha256sum`, verify with:
-
-```bash
-sha256sum -c FILE_CHECKSUMS.sha256
-```
-
 ## Security and bug reports
 
 When reporting a bug, include the NotLight build/revision, operating-system version, steps to reproduce, and a minimal example if possible. Do not attach personal documents or other sensitive material unless it is necessary and you are comfortable sharing it.
