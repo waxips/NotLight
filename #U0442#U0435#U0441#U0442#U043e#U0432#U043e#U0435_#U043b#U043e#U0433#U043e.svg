@@ -1,0 +1,7 @@
+<!-- Created with PixiEditor (https://pixieditor.net) -->
+<svg version="1.1" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
+  <ellipse cx="64" cy="64" rx="64" ry="64" transform="matrix(1, 0, 0, 1, 0, 0)" fill="#000000" fill-opacity="1" stroke="#000000" stroke-width="0" opacity="1" id="Ellipse" />
+  <ellipse cx="34.562665939331055" cy="41.24296188354492" rx="10.203962326049805" ry="10.203960418701172" transform="matrix(1, 0, 0, 0.99999964, -6.31324, 49.771862)" fill="#ffffff" fill-opacity="1" stroke="#ffffff" stroke-width="0" opacity="1" id="Ellipse" />
+  <ellipse cx="34.562665939331055" cy="41.24296188354492" rx="10.203962326049805" ry="10.203960418701172" transform="matrix(0.9999998, 0, 0, 0.99999964, 67.24338, 49.771862)" fill="#ffffff" fill-opacity="1" stroke="#ffffff" stroke-width="0" opacity="1" id="Ellipse" />
+  <ellipse cx="34.562665939331055" cy="41.24296188354492" rx="10.203962326049805" ry="10.203960418701172" transform="matrix(0.99999946, 0, 1.7120807E-15, 0.9999995, 29.437353, -18.939703)" fill="#ffffff" fill-opacity="1" stroke="#ffffff" stroke-width="0" opacity="1" id="Ellipse" />
+</svg>

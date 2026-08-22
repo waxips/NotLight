@@ -1,0 +1,74 @@
+{
+  "schema": "notlight.module_api_contract",
+  "schema_version": 1,
+  "module_api_version": 1,
+  "godot_version": "4.4.1",
+  "module_id_example": "notlight.stereometry",
+  "entry": {
+    "required_methods": [
+      "notlight_get_default_state",
+      "notlight_normalize_state",
+      "notlight_create_surface"
+    ]
+  },
+  "surface": {
+    "required_methods": [
+      "notlight_attach_context"
+    ],
+    "optional_methods": [
+      "notlight_set_host_state",
+      "notlight_set_host_presentation"
+    ]
+  },
+  "context": {
+    "methods": [
+      "get_module_id",
+      "get_module_instance_id",
+      "get_locale",
+      "text",
+      "get_theme_snapshot",
+      "get_capabilities",
+      "commit_state",
+      "get_last_error"
+    ],
+    "signals": [
+      "state_changed",
+      "theme_changed",
+      "locale_changed"
+    ]
+  },
+  "capabilities_v1": [
+    "board.instance_state",
+    "localization.read",
+    "theme.read"
+  ],
+  "state_limits": {
+    "max_json_bytes": 524288,
+    "max_depth": 20,
+    "max_array_items": 4096,
+    "max_dictionary_items": 4096,
+    "max_string_length": 65536,
+    "max_asset_refs": 128
+  },
+  "trust_model": "code modules are trusted executable extensions, not a sandbox",
+  "activation": "install/update takes effect after restart",
+  "portable_board_policy": "board packages preserve module_id + canonical instance state; executable module payloads are never embedded automatically",
+  "manifest_metadata_localization": {
+    "canonical_locale": "ru",
+    "keys": {
+      "name": "module.name",
+      "description": "module.description"
+    },
+    "fallback_order": [
+      "requested_locale",
+      "ru",
+      "manifest_field"
+    ],
+    "applies_to": [
+      "module_library",
+      "module_picker",
+      "module_preview",
+      "notes_module_embed"
+    ]
+  }
+}

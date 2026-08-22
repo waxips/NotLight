@@ -1,0 +1,8 @@
+<!-- Created with PixiEditor (https://pixieditor.net) -->
+<svg version="1.1" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
+  <ellipse cx="64" cy="64" rx="58" ry="58" transform="matrix(1, 0, 0, 1, 0, 0)" fill="#237f52" fill-opacity="1" stroke="#ffffff" stroke-width="0" opacity="1" id="Ellipse" />
+  <path d="M64 30L36 82L92 82L64 30Z" fill-rule="nonzero" transform="matrix(1, 0, 0, 1, 0, 0)" fill="#ffffff" fill-opacity="0" stroke="#bce3c9" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" opacity="0.5799999833106995" id="Path" />
+  <ellipse cx="64" cy="30" rx="12" ry="12" transform="matrix(1, 0, 0, 1, 0, 0)" fill="#faf8eb" fill-opacity="1" stroke="#ffffff" stroke-width="0" opacity="1" id="Ellipse" />
+  <ellipse cx="36" cy="82" rx="12" ry="12" transform="matrix(1, 0, 0, 1, 0, 0)" fill="#bce3c9" fill-opacity="1" stroke="#ffffff" stroke-width="0" opacity="1" id="Ellipse" />
+  <ellipse cx="92" cy="82" rx="12" ry="12" transform="matrix(1, 0, 0, 1, 0, 0)" fill="#faf8eb" fill-opacity="1" stroke="#ffffff" stroke-width="0" opacity="1" id="Ellipse" />
+</svg>

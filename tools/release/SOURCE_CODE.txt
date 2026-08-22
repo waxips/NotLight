@@ -1,0 +1,15 @@
+NotLight source code
+====================
+
+The exact NotLight source revision for an official release is available from the
+matching Git tag/release at:
+
+https://github.com/waxips/NotLight
+
+NotLight's original source code is licensed under GPL-3.0-or-later unless a file
+states otherwise. Third-party components retain their own licenses; see
+THIRD_PARTY_NOTICES.md and THIRD_PARTY_LICENSES/ in this distribution.
+
+Several large third-party runtime binaries are intentionally NOT included in the
+public NotLight Windows ZIP. START_NOTLIGHT.bat downloads pinned copies directly
+from their upstream providers and verifies their archives before installation.

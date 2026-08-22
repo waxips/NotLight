@@ -1,0 +1,146 @@
+name: Build Windows release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version label for a test build (for example v0.1.0-rc1)"
+        required: false
+        default: "dev"
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    env:
+      GODOT_VERSION: "4.4.1"
+      GODOT_TAG: "4.4.1-stable"
+      GODOT_TEMPLATE_DIR: "4.4.1.stable"
+      PYTHONDONTWRITEBYTECODE: "1"
+
+    steps:
+      - name: Check out exact source revision
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Run source tests and release hygiene checks
+        shell: pwsh
+        run: |
+          python -B -m pytest -q -p no:cacheprovider
+          python tools/validate_localization.py
+          python tools/validate_project.py
+          python tools/validate_release_compliance.py
+          python tools/generate_file_checksums.py
+          git diff --exit-code -- FILE_CHECKSUMS.sha256
+
+      - name: Restore pinned NotLight runtime dependencies
+        shell: pwsh
+        run: |
+          powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\setup_windows_dependencies.ps1
+
+      - name: Download and verify official Godot 4.4.1 editor/templates
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $base = "https://github.com/godotengine/godot-builds/releases/download/$env:GODOT_TAG"
+          $editorName = "Godot_v$env:GODOT_TAG" + "_win64.exe.zip"
+          $templatesName = "Godot_v$env:GODOT_TAG" + "_export_templates.tpz"
+          Invoke-WebRequest "$base/SHA512-SUMS.txt" -OutFile godot-SHA512-SUMS.txt
+          Invoke-WebRequest "$base/$editorName" -OutFile $editorName
+          Invoke-WebRequest "$base/$templatesName" -OutFile $templatesName
+
+          function Verify-GodotAsset([string]$FileName) {
+            $line = Get-Content .\godot-SHA512-SUMS.txt | Where-Object { $_ -match [regex]::Escape($FileName) + '$' } | Select-Object -First 1
+            if ($null -eq $line) { throw "Official SHA512-SUMS.txt has no entry for $FileName" }
+            $expected = ($line -split '\s+')[0].ToLowerInvariant()
+            $actual = (Get-FileHash -Algorithm SHA512 -LiteralPath $FileName).Hash.ToLowerInvariant()
+            if ($actual -ne $expected) { throw "Godot SHA-512 mismatch for $FileName" }
+            Write-Host "Verified $FileName"
+          }
+          Verify-GodotAsset $editorName
+          Verify-GodotAsset $templatesName
+
+          New-Item -ItemType Directory -Force -Path .godot-ci | Out-Null
+          Expand-Archive -LiteralPath $editorName -DestinationPath .godot-ci -Force
+          $godotExe = (Get-ChildItem .godot-ci -Filter "Godot_v*-stable_win64.exe" -File -Recurse | Select-Object -First 1).FullName
+          if ([string]::IsNullOrWhiteSpace($godotExe)) { throw "Godot editor executable not found after extraction." }
+          "GODOT_EXE=$godotExe" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+          $templateRoot = Join-Path $env:APPDATA "Godot\export_templates\$env:GODOT_TEMPLATE_DIR"
+          $templateTemp = Join-Path (Get-Location) ".godot-template-unpack"
+          if (Test-Path $templateTemp) { Remove-Item $templateTemp -Recurse -Force }
+          New-Item -ItemType Directory -Force -Path $templateTemp | Out-Null
+          # PowerShell Expand-Archive only accepts .zip extensions even though Godot's .tpz is a ZIP archive.
+          $templatesZip = Join-Path (Get-Location) "godot-export-templates.zip"
+          Copy-Item -LiteralPath $templatesName -Destination $templatesZip -Force
+          Expand-Archive -LiteralPath $templatesZip -DestinationPath $templateTemp -Force
+          $sourceTemplates = Join-Path $templateTemp "templates"
+          if (-not (Test-Path $sourceTemplates)) { throw "Godot template archive layout is unexpected." }
+          if (Test-Path $templateRoot) { Remove-Item $templateRoot -Recurse -Force }
+          New-Item -ItemType Directory -Force -Path (Split-Path -Parent $templateRoot) | Out-Null
+          Copy-Item -LiteralPath $sourceTemplates -Destination $templateRoot -Recurse -Force
+
+      - name: Build and smoke-test full local Windows export
+        shell: pwsh
+        run: |
+          powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\build_windows.ps1 -Godot "$env:GODOT_EXE"
+
+      - name: Create public bootstrap ZIP
+        id: package
+        shell: pwsh
+        run: |
+          if ("${{ github.ref_type }}" -eq "tag") {
+            $version = "${{ github.ref_name }}"
+          } else {
+            $version = "${{ inputs.version }}"
+          }
+          if ([string]::IsNullOrWhiteSpace($version)) { $version = "dev" }
+          powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\make_windows_bootstrap_release.ps1 -Version $version
+          $zip = (Get-ChildItem .\release_out\NotLight-*-windows-x86_64.zip | Select-Object -First 1).FullName
+          if ([string]::IsNullOrWhiteSpace($zip)) { throw "Release ZIP was not created." }
+          "zip=$zip" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: NotLight-${{ steps.package.outputs.version }}-build-artifacts
+          path: |
+            ${{ steps.package.outputs.zip }}
+            release_out/SHA256SUMS.txt
+          if-no-files-found: error
+
+      - name: Publish GitHub Release for version tags
+        if: github.ref_type == 'tag'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $zip = "${{ steps.package.outputs.zip }}"
+          $notes = @"
+          NotLight $tag
+
+          Windows x64 build.
+
+          For most users:
+          1. Download the NotLight Windows ZIP.
+          2. Extract the whole ZIP.
+          3. Double-click START_NOTLIGHT.bat.
+
+          On the first start, NotLight downloads pinned third-party media/PDF/formula runtimes directly from their upstream providers and verifies the downloaded archives. See README_WINDOWS.txt inside the ZIP for details.
+
+          Source code for this exact release is the $tag tag in this repository.
+          "@
+          $notes | Set-Content -LiteralPath .\release-notes.txt -Encoding UTF8
+          gh release create $tag $zip .\release_out\SHA256SUMS.txt --title "NotLight $tag" --notes-file .\release-notes.txt

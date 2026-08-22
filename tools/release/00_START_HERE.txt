@@ -1,0 +1,37 @@
+NOTLIGHT — START HERE
+=====================
+
+ENGLISH
+-------
+1. Extract the ENTIRE ZIP to a normal folder.
+2. Double-click START_NOTLIGHT.bat.
+3. The first start needs an Internet connection. NotLight will automatically
+   download and verify the extra components needed for video, PDF and formulas,
+   then launch the app. Later starts reuse them.
+
+Do not launch the app from inside the ZIP. On the first start, use
+START_NOTLIGHT.bat instead of opening NotLightBoard.exe directly.
+
+If a school/university network blocks the first download, try another Internet
+connection and run START_NOTLIGHT.bat again.
+
+Project and source code: https://github.com/waxips/NotLight
+Project channel: https://t.me/notlight_official
+
+
+РУССКИЙ
+-------
+1. ПОЛНОСТЬЮ распакуйте ZIP в обычную папку.
+2. Дважды нажмите START_NOTLIGHT.bat.
+3. При первом запуске нужен интернет. NotLight сам скачает и проверит
+   дополнительные компоненты для видео, PDF и формул, а затем запустит программу.
+   При следующих запусках повторно скачивать их не потребуется.
+
+Не запускайте программу прямо из ZIP. При первом запуске используйте
+START_NOTLIGHT.bat, а не NotLightBoard.exe напрямую.
+
+Если школьная/университетская сеть блокирует скачивание компонентов, попробуйте
+другое подключение к интернету и снова запустите START_NOTLIGHT.bat.
+
+Проект и исходный код: https://github.com/waxips/NotLight
+Канал проекта: https://t.me/notlight_official

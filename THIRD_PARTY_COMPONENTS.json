@@ -1,0 +1,261 @@
+{
+  "schema": "notlight.third-party-components",
+  "schema_version": 1,
+  "reviewed_on": "2026-08-22",
+  "purpose": "Machine-readable inventory of third-party software and redistributable assets in the NotLight source/release tree. This inventory is not legal advice and is not a substitute for the license texts or source-delivery requirements.",
+  "release_policy": {
+    "public_binary_release_allowed_only_when_no_blocker_remains": true,
+    "checklist": "RELEASE_COMPLIANCE.md",
+    "corresponding_source_map": "CORRESPONDING_SOURCE.md"
+  },
+  "components": [
+    {
+      "id": "godot-engine",
+      "name": "Godot Engine",
+      "version": "4.4.1",
+      "role": "engine/export template",
+      "license_expression": "MIT",
+      "upstream": "https://github.com/godotengine/godot",
+      "license_files": [
+        "THIRD_PARTY_LICENSES/Godot-MIT.txt",
+        "THIRD_PARTY_LICENSES/GODOT_COPYRIGHT.txt"
+      ],
+      "status": "ready",
+      "release_action": "Keep the engine MIT license and matching Godot third-party copyright/license inventory in the binary distribution."
+    },
+    {
+      "id": "eirteam-ffmpeg-wrapper",
+      "name": "EIRTeam.FFmpeg GDExtension wrapper",
+      "version": "v1.1.4 / commit 270e661 / official asset verified",
+      "role": "Godot video decoder GDExtension",
+      "license_expression": "MIT",
+      "upstream": "https://github.com/EIRTeam/EIRTeam.FFmpeg",
+      "license_files": [
+        "THIRD_PARTY_LICENSES/EIRTeam.FFmpeg-MIT.txt"
+      ],
+      "provenance_file": "addons/ffmpeg/SOURCE_INFO.md",
+      "status": "ready",
+      "release_action": "Source repo downloads the verified official v1.1.4 asset. Binary releases must retain the MIT notice.",
+      "source": "https://github.com/EIRTeam/EIRTeam.FFmpeg/releases/tag/autobuild-2025-11-12-13-44",
+      "repository_presence": "downloaded-runtime",
+      "upstream_asset": "eirteam-ffmpeg-1.1.4.zip",
+      "upstream_asset_sha256": "1a8dbc4d7524172ca72517dac4ffb24965025c2f19067882be35376b75bc107c",
+      "local_files": [
+        "addons/ffmpeg/win64/libgdffmpeg.windows.template_release.x86_64.dll",
+        "addons/ffmpeg/win64/libgdffmpeg.windows.template_debug.x86_64.dll",
+        "addons/ffmpeg/linux64/libgdffmpeg.linux.template_release.x86_64.so",
+        "addons/ffmpeg/linux64/libgdffmpeg.linux.template_debug.x86_64.so"
+      ],
+      "sha256": {
+        "addons/ffmpeg/win64/libgdffmpeg.windows.template_release.x86_64.dll": "958189ecf4c9201d5f1119937fcdc13ee1ed4b4c2271bced5f6f3d55f25a38d3",
+        "addons/ffmpeg/win64/libgdffmpeg.windows.template_debug.x86_64.dll": "e0301da2e1f9f1cb1625e6b72f969c253a91c9496f174d664732c35ab3423c36",
+        "addons/ffmpeg/linux64/libgdffmpeg.linux.template_release.x86_64.so": "5e4936f58d56f9d491707c41536cc8c04d772b50695790ebd32e4aaa01276efa",
+        "addons/ffmpeg/linux64/libgdffmpeg.linux.template_debug.x86_64.so": "bd3e7e3314e68c8fe2419b6bbe7e637b9ac8f3366640119b6e40658cfac6ce90"
+      },
+      "download_url": "https://github.com/EIRTeam/EIRTeam.FFmpeg/releases/download/autobuild-2025-11-12-13-44/eirteam-ffmpeg-1.1.4.zip",
+      "public_windows_package_presence": "not-included; installed by START_NOTLIGHT.bat from pinned upstream download",
+      "public_windows_release_action": "Do not place this downloaded runtime object code in the public NotLight ZIP. The first-run installer downloads the pinned upstream archive and verifies it on the recipient machine."
+    },
+    {
+      "id": "eirteam-embedded-ffmpeg",
+      "name": "FFmpeg shared libraries bundled with EIRTeam.FFmpeg",
+      "version": "N-111611-g5b11ee9429-20230724 (from verified EIRTeam v1.1.4 asset)",
+      "role": "shared multimedia libraries used by EIRTeam.FFmpeg",
+      "license_expression": "LGPL-3.0-or-later (observed FFmpeg configuration; dependency licenses also apply)",
+      "upstream": "https://ffmpeg.org/",
+      "license_files": [
+        "THIRD_PARTY_LICENSES/EIRTeam.FFmpeg-FFmpeg-LGPLv3.txt",
+        "THIRD_PARTY_LICENSES/FFmpeg-GPLv3.txt"
+      ],
+      "provenance_file": "addons/ffmpeg/SOURCE_INFO.md",
+      "status": "ready-via-first-run-upstream-download",
+      "release_action": "Public NotLight ZIP does not contain this object code. START_NOTLIGHT.bat installs the pinned upstream build on the recipient machine. If a future release bundles it directly, re-enable the applicable source-delivery obligations.",
+      "source": "https://github.com/EIRTeam/EIRTeam.FFmpeg/releases/tag/autobuild-2025-11-12-13-44",
+      "repository_presence": "downloaded-runtime",
+      "upstream_asset": "eirteam-ffmpeg-1.1.4.zip",
+      "upstream_asset_sha256": "1a8dbc4d7524172ca72517dac4ffb24965025c2f19067882be35376b75bc107c",
+      "local_files": [
+        "addons/ffmpeg/win64/avcodec-60.dll",
+        "addons/ffmpeg/win64/avfilter-9.dll",
+        "addons/ffmpeg/win64/avformat-60.dll",
+        "addons/ffmpeg/win64/avutil-58.dll",
+        "addons/ffmpeg/win64/swresample-4.dll",
+        "addons/ffmpeg/win64/swscale-7.dll",
+        "addons/ffmpeg/linux64/libavcodec.so.60",
+        "addons/ffmpeg/linux64/libavfilter.so.9",
+        "addons/ffmpeg/linux64/libavformat.so.60",
+        "addons/ffmpeg/linux64/libavutil.so.58",
+        "addons/ffmpeg/linux64/libswresample.so.4",
+        "addons/ffmpeg/linux64/libswscale.so.7"
+      ],
+      "sha256": {
+        "addons/ffmpeg/win64/avcodec-60.dll": "be1909c25afc88c6b54daa1372ef9fe402518b4459a6f09bf513c17b062c6f46",
+        "addons/ffmpeg/win64/avfilter-9.dll": "5bd684f98cfe0f0d9adf410ffa8a97efbdd0ebd6b830ffb2561d5dd337b8bc33",
+        "addons/ffmpeg/win64/avformat-60.dll": "be395e0b846690841c152c019d746207af9b595bdbd0ae5dba55ce1e1306aa39",
+        "addons/ffmpeg/win64/avutil-58.dll": "e2d6add09e9aa735ce7a9dc3b25cb00151d412556b1a1da0dea1a8b597729a98",
+        "addons/ffmpeg/win64/swresample-4.dll": "ef963e60786af7523ef3d83feeee3d11ca45672a58845ad30c11f5573bca8146",
+        "addons/ffmpeg/win64/swscale-7.dll": "81050c2d623c8834d9af9a8cc6244b9e5c6e901e53cd288214178b3447fbee73",
+        "addons/ffmpeg/linux64/libavcodec.so.60": "71a6707cdeab94425c8dfaaeae3c97f47c1e38dcea817a196b9f815772d998dc",
+        "addons/ffmpeg/linux64/libavfilter.so.9": "37f6277343e7235398d2b157480ffcb472824fb6a965bb1fee0374194c8db34d",
+        "addons/ffmpeg/linux64/libavformat.so.60": "a7e451fa96072a702029b380e09e91cd6d4c4deaf9fe52fe308d109b0c367a47",
+        "addons/ffmpeg/linux64/libavutil.so.58": "27e3d406423c5b5308ec3c44410f561f33c7146346dc572ebbe59ab74798c571",
+        "addons/ffmpeg/linux64/libswresample.so.4": "a88c56faba2628e977786490cb04b8f9d2a9524cfaede0d3d9abe29951ab7c81",
+        "addons/ffmpeg/linux64/libswscale.so.7": "92bf879222de54bf063ba8668aad7c8795617f5debb4a985567817542508734b"
+      },
+      "download_url": "https://github.com/EIRTeam/EIRTeam.FFmpeg/releases/download/autobuild-2025-11-12-13-44/eirteam-ffmpeg-1.1.4.zip",
+      "public_windows_package_presence": "not-included; installed by START_NOTLIGHT.bat from pinned upstream download",
+      "public_windows_release_action": "Do not place this downloaded runtime object code in the public NotLight ZIP. The first-run installer downloads the pinned upstream archive and verifies it on the recipient machine."
+    },
+    {
+      "id": "ffmpeg-cli",
+      "name": "Gyan.dev FFmpeg Essentials CLI",
+      "version": "FFmpeg 8.1.2",
+      "role": "ffmpeg.exe and ffprobe.exe media sidecars",
+      "license_expression": "GPL-3.0 (provider build declaration; bundled component licenses also apply)",
+      "upstream": "https://ffmpeg.org/",
+      "provider": "https://www.gyan.dev/ffmpeg/builds/",
+      "license_files": [
+        "THIRD_PARTY_LICENSES/FFmpeg-GPLv3.txt"
+      ],
+      "provenance_file": "tools/ffmpeg/SOURCE_INFO.md",
+      "status": "ready-via-first-run-upstream-download",
+      "release_action": "Public NotLight ZIP does not contain this object code. START_NOTLIGHT.bat installs the pinned upstream build on the recipient machine. If a future release bundles it directly, re-enable the applicable source-delivery obligations.",
+      "repository_presence": "downloaded-runtime",
+      "upstream_asset": "ffmpeg-8.1.2-essentials_build.zip",
+      "upstream_asset_sha256": "db580001caa24ac104c8cb856cd113a87b0a443f7bdf47d8c12b1d740584a2ec",
+      "download_url": "https://www.gyan.dev/ffmpeg/builds/packages/ffmpeg-8.1.2-essentials_build.zip",
+      "public_windows_package_presence": "not-included; installed by START_NOTLIGHT.bat from pinned upstream download",
+      "public_windows_release_action": "Do not place this downloaded runtime object code in the public NotLight ZIP. The first-run installer downloads the pinned upstream archive and verifies it on the recipient machine."
+    },
+    {
+      "id": "poppler",
+      "name": "Poppler Windows runtime",
+      "version": "26.02.0 / provider release v26.02.0-0",
+      "role": "pdfinfo and pdftoppm PDF sidecars plus runtime dependency closure",
+      "license_expression": "GPL-2.0-or-later (Poppler; dependency licenses separately retained)",
+      "upstream": "https://poppler.freedesktop.org/",
+      "provider": "https://github.com/oschwartz10612/poppler-windows",
+      "license_files": [
+        "THIRD_PARTY_LICENSES/Poppler-GPL-2.0.txt",
+        "THIRD_PARTY_LICENSES/Poppler-Data-COPYING.txt",
+        "THIRD_PARTY_LICENSES/Poppler-Data-Adobe.txt",
+        "THIRD_PARTY_LICENSES/Poppler-Data-GPL-3.0.txt",
+        "THIRD_PARTY_LICENSES/Poppler-Windows-Dependencies/README.md"
+      ],
+      "provenance_file": "tools/poppler/SOURCE_INFO.md",
+      "status": "ready-via-first-run-upstream-download",
+      "release_action": "Public NotLight ZIP does not contain this object code. START_NOTLIGHT.bat installs the pinned upstream build on the recipient machine. If a future release bundles it directly, re-enable the applicable source-delivery obligations.",
+      "repository_presence": "downloaded-runtime",
+      "upstream_asset": "Release-26.02.0-0.zip",
+      "upstream_asset_sha256": "993e4a94376ed712fafc7058d724ea0b943d118bbd2305cd9ed55174eb85cda5",
+      "download_url": "https://github.com/oschwartz10612/poppler-windows/releases/download/v26.02.0-0/Release-26.02.0-0.zip",
+      "public_windows_package_presence": "not-included; installed by START_NOTLIGHT.bat from pinned upstream download",
+      "public_windows_release_action": "Do not place this downloaded runtime object code in the public NotLight ZIP. The first-run installer downloads the pinned upstream archive and verifies it on the recipient machine."
+    },
+    {
+      "id": "qpdf",
+      "name": "qpdf",
+      "version": "12.4.0",
+      "role": "optional PDF optimization sidecar",
+      "license_expression": "Apache-2.0",
+      "upstream": "https://github.com/qpdf/qpdf",
+      "license_files": [
+        "THIRD_PARTY_LICENSES/QPDF-Apache-2.0.txt",
+        "THIRD_PARTY_LICENSES/QPDF-NOTICE.md"
+      ],
+      "provenance_file": "tools/qpdf/SOURCE_INFO.md",
+      "status": "ready",
+      "release_action": "Ship only qpdf.exe and qpdf30.dll; use the system Microsoft VC++ Redistributable rather than copied runtime DLLs."
+    },
+    {
+      "id": "typst",
+      "name": "Typst compiler",
+      "version": "0.15.1",
+      "role": "local formula renderer",
+      "license_expression": "Apache-2.0",
+      "upstream": "https://github.com/typst/typst",
+      "license_files": [
+        "THIRD_PARTY_LICENSES/Typst-Apache-2.0.txt",
+        "THIRD_PARTY_LICENSES/Typst-NOTICE.txt"
+      ],
+      "provenance_file": "tools/typst/SOURCE_INFO.md",
+      "status": "ready",
+      "release_action": "Not committed in the source repository; restored from the pinned official archive. Binary releases keep Apache license + NOTICE.",
+      "repository_presence": "downloaded-runtime",
+      "upstream_asset": "typst-x86_64-pc-windows-msvc.zip",
+      "upstream_asset_sha256": "19ce3551153c2fe7ee9fa2f95208310c8f4d3209fedb699e0333faf8913f6736",
+      "download_url": "https://github.com/typst/typst/releases/download/v0.15.1/typst-x86_64-pc-windows-msvc.zip",
+      "public_windows_package_presence": "not-included; installed by START_NOTLIGHT.bat from pinned upstream download",
+      "public_windows_release_action": "Do not place this downloaded runtime object code in the public NotLight ZIP. The first-run installer downloads the pinned upstream archive and verifies it on the recipient machine."
+    },
+    {
+      "id": "mitex",
+      "name": "MiTeX Typst package",
+      "version": "0.2.7",
+      "role": "local LaTeX-to-Typst formula package",
+      "license_expression": "Apache-2.0",
+      "upstream": "https://github.com/mitex-rs/mitex",
+      "license_files": [
+        "THIRD_PARTY_LICENSES/MiTeX-Apache-2.0.txt"
+      ],
+      "provenance_file": "tools/typst/SOURCE_INFO.md",
+      "status": "ready",
+      "release_action": "Keep the Apache license and deterministic local-package provenance."
+    },
+    {
+      "id": "music-hypnothis",
+      "name": "Hypnothis",
+      "version": "ISRC USUAN1100634",
+      "creator": "Kevin MacLeod",
+      "role": "background music",
+      "license_expression": "CC-BY-4.0",
+      "source": "https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1100634",
+      "local_files": [
+        "assets/audio/background/Hypnothis.mp3"
+      ],
+      "license_files": [
+        "THIRD_PARTY_LICENSES/CC-BY-4.0.txt"
+      ],
+      "status": "ready-if-change-statement-accurate",
+      "release_action": "Keep attribution/source/license and update the change statement if the audio is intentionally modified.",
+      "sha256": {
+        "assets/audio/background/Hypnothis.mp3": "bb69aaa5abf6bcea0cf312f15e73388ef34c1d3ca9a72a3799ef5ebab94b5ef4"
+      }
+    },
+    {
+      "id": "music-night-cave",
+      "name": "Night Cave",
+      "version": "ISRC USUAN1100446",
+      "creator": "Kevin MacLeod",
+      "role": "background music",
+      "license_expression": "CC-BY-4.0",
+      "source": "https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1100446",
+      "local_files": [
+        "assets/audio/background/Night_20Cave.mp3"
+      ],
+      "license_files": [
+        "THIRD_PARTY_LICENSES/CC-BY-4.0.txt"
+      ],
+      "status": "ready-if-change-statement-accurate",
+      "release_action": "Keep attribution/source/license and update the change statement if the audio is intentionally modified.",
+      "sha256": {
+        "assets/audio/background/Night_20Cave.mp3": "b8a80bbf0fc66db1758acdec416a219c10d7546ec4e2ac33c5f78c35f7a77534"
+      }
+    },
+    {
+      "id": "ambient-phrase-reference-catalog",
+      "name": "NotLight ambient phrase reference catalog",
+      "version": "schema v2",
+      "role": "author/reference catalog for Hub ambient phrases; runtime strings are resolved through normal localization",
+      "license_expression": "CC0-1.0",
+      "local_files": [
+        "localization/ambient/phrases.json"
+      ],
+      "license_files": [
+        "THIRD_PARTY_LICENSES/CC0-1.0.txt"
+      ],
+      "status": "ready",
+      "release_action": "Keep the CC0 declaration/license text when redistributing the reference catalog."
+    }
+  ]
+}

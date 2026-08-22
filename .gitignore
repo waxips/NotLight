@@ -1,17 +1,28 @@
-# Godot 4+ specific ignores
 .godot/
-.nomedia
-
-# Godot-specific ignores
-.import/
-export.cfg
-export_credentials.cfg
+dist/
+build_wow/
+.pytest_cache/
+__pycache__/
+*.pyc
 *.tmp
+*.bak
+.DS_Store
+Thumbs.db
 
-# Imported translations (automatically generated from CSV files)
-*.translation
+# Downloaded third-party runtimes. Restore them locally with:
+#   powershell -ExecutionPolicy Bypass -File .\tools\setup_windows_dependencies.ps1
+# Keeping them out of Git keeps the public repository source-focused and avoids
+# redistributing copied GPL/LGPL object code as part of the source checkout.
+/addons/ffmpeg/win64/
+/addons/ffmpeg/linux64/
+/tools/ffmpeg/windows/bin/ffmpeg.exe
+/tools/ffmpeg/windows/bin/ffprobe.exe
+/tools/poppler/windows/
+/tools/typst/windows/typst.exe
 
-# Mono-specific ignores
-.mono/
-data_*/
-mono_crash.*.json
+release_out/
+.godot-ci/
+.godot-template-unpack/
+godot-SHA512-SUMS.txt
+Godot_v*-stable_win64.exe.zip
+Godot_v*-stable_export_templates.tpz

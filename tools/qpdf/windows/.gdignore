@@ -1,0 +1,1 @@
+# qpdf is an external sidecar runtime. NotLight resolves it via the native filesystem.

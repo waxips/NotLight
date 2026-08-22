@@ -1,0 +1,14 @@
+{
+    "schema":  "notlight.mitex-package-provenance",
+    "schema_version":  1,
+    "package":  "mitex",
+    "version":  "0.2.7",
+    "license":  "Apache-2.0",
+    "source_url":  "https://packages.typst.org/preview/mitex-0.2.7.tar.gz",
+    "source_archive":  "mitex-0.2.7.tar.gz",
+    "source_archive_sha256":  "0159e214845e49cbdc332d9d572da112dae5ad248072e0a7680d38c8307c2e15",
+    "content_digest_sha256":  "ea597cd5da751cfed1876b241bfdb129fef7a00708c6d547448aac8546c399c9",
+    "file_count":  11,
+    "total_bytes":  359535,
+    "prepared_utc":  "2026-08-16T23:54:26.0233773Z"
+}
