@@ -18,12 +18,40 @@ $PackageName = "NotLight-$SafeVersion-windows-x86_64"
 $PackageDir = Join-Path $OutputRoot $PackageName
 $ZipPath = Join-Path $OutputRoot ($PackageName + ".zip")
 
-if (-not (Test-Path -LiteralPath (Join-Path $BuildDir "NotLight.exe") -PathType Leaf)) {
-    throw "Build directory does not contain NotLight.exe: $BuildDir"
+function Ensure-CanonicalPackageArtifact(
+    [string]$CanonicalName,
+    [string]$Filter,
+    [string]$ExcludedNamePattern = ""
+) {
+    $canonicalPath = Join-Path $BuildDir $CanonicalName
+    if (Test-Path -LiteralPath $canonicalPath -PathType Leaf) {
+        return
+    }
+
+    $candidates = @(
+        Get-ChildItem -LiteralPath $BuildDir -Filter $Filter -File -ErrorAction SilentlyContinue |
+            Where-Object {
+                [string]::IsNullOrWhiteSpace($ExcludedNamePattern) -or
+                $_.Name -notmatch $ExcludedNamePattern
+            }
+    )
+
+    if ($candidates.Count -eq 1) {
+        Move-Item -LiteralPath $candidates[0].FullName -Destination $canonicalPath -Force
+        Write-Host "Normalized package artifact: $($candidates[0].Name) -> $CanonicalName"
+        return
+    }
+
+    $found = if ($candidates.Count -eq 0) {
+        "<none>"
+    } else {
+        ($candidates | ForEach-Object { $_.Name }) -join ", "
+    }
+    throw "Build directory does not contain $CanonicalName and could not normalize it. Root-level candidates: $found"
 }
-if (-not (Test-Path -LiteralPath (Join-Path $BuildDir "NotLight.pck") -PathType Leaf)) {
-    throw "Build directory does not contain NotLight.pck: $BuildDir"
-}
+
+Ensure-CanonicalPackageArtifact -CanonicalName "NotLight.exe" -Filter "*.exe" -ExcludedNamePattern '(?i)\.console\.exe$'
+Ensure-CanonicalPackageArtifact -CanonicalName "NotLight.pck" -Filter "*.pck"
 
 if (Test-Path -LiteralPath $PackageDir) { Remove-Item -LiteralPath $PackageDir -Recurse -Force }
 if (Test-Path -LiteralPath $ZipPath) { Remove-Item -LiteralPath $ZipPath -Force }

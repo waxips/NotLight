@@ -66,6 +66,44 @@ if ($LASTEXITCODE -ne 0) {
     throw "Godot export failed with exit code $LASTEXITCODE"
 }
 
+function Ensure-CanonicalExportArtifact(
+    [string]$CanonicalPath,
+    [string]$Filter,
+    [string]$ExcludedNamePattern = ""
+) {
+    if (Test-Path -LiteralPath $CanonicalPath -PathType Leaf) {
+        return
+    }
+
+    $candidates = @(
+        Get-ChildItem -LiteralPath $dist -Filter $Filter -File -ErrorAction SilentlyContinue |
+            Where-Object {
+                [string]::IsNullOrWhiteSpace($ExcludedNamePattern) -or
+                $_.Name -notmatch $ExcludedNamePattern
+            }
+    )
+
+    if ($candidates.Count -eq 1) {
+        $source = $candidates[0].FullName
+        Move-Item -LiteralPath $source -Destination $CanonicalPath -Force
+        Write-Host "Normalized export artifact: $($candidates[0].Name) -> $(Split-Path -Leaf $CanonicalPath)"
+        return
+    }
+
+    $found = if ($candidates.Count -eq 0) {
+        "<none>"
+    } else {
+        ($candidates | ForEach-Object { $_.Name }) -join ", "
+    }
+    throw "Expected export artifact was not created: $CanonicalPath. Root-level candidates: $found"
+}
+
+Ensure-CanonicalExportArtifact -CanonicalPath $exePath -Filter "*.exe" -ExcludedNamePattern '(?i)\.console\.exe$'
+$pckPath = [System.IO.Path]::ChangeExtension($exePath, ".pck")
+Ensure-CanonicalExportArtifact -CanonicalPath $pckPath -Filter "*.pck"
+
+Write-Host "Application export verified: $(Split-Path -Leaf $exePath), $(Split-Path -Leaf $pckPath)"
+
 # The editor export plugin performs these copies for normal GUI exports. Repeat the
 # same layout here after deleting any plugin-produced directory first, so the
 # headless release path is deterministic and never creates nested windows/windows
