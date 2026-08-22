@@ -61,10 +61,51 @@ $preset = "Windows Desktop"
 $exportFlag = if ($DebugBuild) { "--export-debug" } else { "--export-release" }
 $exePath = Join-Path $dist "NotLight.exe"
 
-& $Godot --headless --path $root $exportFlag $preset $exePath
-if ($LASTEXITCODE -ne 0) {
-    throw "Godot export failed with exit code $LASTEXITCODE"
+$godotCommand = $Godot
+$resolvedGodot = Get-Command $godotCommand -ErrorAction SilentlyContinue
+if ($null -ne $resolvedGodot -and -not [string]::IsNullOrWhiteSpace($resolvedGodot.Source)) {
+    $godotCommand = $resolvedGodot.Source
 }
+
+# Official Windows Godot archives contain a console wrapper specifically suited
+# to terminal/CI use. Prefer it when the caller supplied the GUI executable.
+if (Test-Path -LiteralPath $godotCommand -PathType Leaf) {
+    $godotItem = Get-Item -LiteralPath $godotCommand
+    if ($godotItem.Name -match '(?i)_win64\.exe$' -and $godotItem.Name -notmatch '(?i)_console\.exe$') {
+        $consoleName = $godotItem.Name -replace '(?i)_win64\.exe$', '_win64_console.exe'
+        $consolePath = Join-Path $godotItem.DirectoryName $consoleName
+        if (Test-Path -LiteralPath $consolePath -PathType Leaf) {
+            $godotCommand = $consolePath
+        }
+    }
+}
+
+$godotArgs = @(
+    "--headless",
+    "--verbose",
+    "--path", $root,
+    $exportFlag,
+    $preset,
+    $exePath
+)
+
+Write-Host ""
+Write-Host "Starting synchronous Godot export..."
+Write-Host "Godot : $godotCommand"
+Write-Host "Preset: $preset"
+Write-Host "Target: $exePath"
+
+# Piping native output makes invocation synchronous even if a Windows GUI
+# executable is used as a fallback. With the console wrapper it is synchronous
+# naturally, but keep this safeguard for local developer installations.
+& $godotCommand @godotArgs
+$godotExitCode = $LASTEXITCODE
+
+if ($godotExitCode -ne 0) {
+    throw "Godot export failed with exit code $godotExitCode"
+}
+
+Write-Host "Godot process finished with exit code 0."
 
 function Ensure-CanonicalExportArtifact(
     [string]$CanonicalPath,

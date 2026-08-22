@@ -78,8 +78,16 @@ jobs:
 
           New-Item -ItemType Directory -Force -Path .godot-ci | Out-Null
           Expand-Archive -LiteralPath $editorName -DestinationPath .godot-ci -Force
-          $godotExe = (Get-ChildItem .godot-ci -Filter "Godot_v*-stable_win64.exe" -File -Recurse | Select-Object -First 1).FullName
-          if ([string]::IsNullOrWhiteSpace($godotExe)) { throw "Godot editor executable not found after extraction." }
+          $godotConsole = Get-ChildItem .godot-ci -Filter "Godot_v*-stable_win64_console.exe" -File -Recurse | Select-Object -First 1
+          $godotGui = Get-ChildItem .godot-ci -Filter "Godot_v*-stable_win64.exe" -File -Recurse | Select-Object -First 1
+          if ($null -ne $godotConsole) {
+            $godotExe = $godotConsole.FullName
+          } elseif ($null -ne $godotGui) {
+            $godotExe = $godotGui.FullName
+          } else {
+            throw "Godot editor executable not found after extraction."
+          }
+          Write-Host "Godot CLI executable: $godotExe"
           "GODOT_EXE=$godotExe" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
           $templateRoot = Join-Path $env:APPDATA "Godot\export_templates\$env:GODOT_TEMPLATE_DIR"
