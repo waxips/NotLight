@@ -95,7 +95,7 @@ def main() -> int:
     require(
         settings,
         (
-            "const SETTINGS_SCHEMA_VERSION: int = 18",
+            "const SETTINGS_SCHEMA_VERSION: int = 19",
             "const MAX_NOTE_EMBED_LIVE_MEDIA: int = 64",
             "var custom_note_embed_live_media: int",
             "var custom_note_embed_rich_preview: bool",

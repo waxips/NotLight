@@ -44,12 +44,13 @@ signal settings_changed(settings: Dictionary)
 signal settings_error(message: String)
 
 const SETTINGS_PATH: String = "user://notlight/settings.json"
-const SETTINGS_SCHEMA_VERSION: int = 18
+const SETTINGS_SCHEMA_VERSION: int = 19
 const DEFAULT_CAMERA_SENSITIVITY: float = 1.0
 const DEFAULT_ZOOM_SENSITIVITY: float = 1.0
 const DEFAULT_CAMERA_SPEED: float = 9.5
 const SAVE_DEBOUNCE_SECONDS: float = 0.35
 const INTERACTIVE_BROADCAST_DEBOUNCE_SECONDS: float = 0.08
+const DEFAULT_BOARD_ROOT: String = "user://notlight"
 const DEFAULT_LIBRARY_ROOT: String = "user://notlight/library"
 const DEFAULT_MODULE_ROOT: String = "user://notlight/modules"
 const DEFAULT_LOCALE: String = "ru"
@@ -135,6 +136,7 @@ var custom_note_embed_rich_preview: bool = true
 var custom_texture_cache_mb: int = 512
 var custom_drawing_quality: DrawingQuality = DrawingQuality.HIGH
 
+var board_root: String = DEFAULT_BOARD_ROOT
 var library_root: String = DEFAULT_LIBRARY_ROOT
 var module_root: String = DEFAULT_MODULE_ROOT
 var compression_cpu_mode: CompressionCpuMode = CompressionCpuMode.ECO
@@ -228,6 +230,11 @@ func _migrate_settings_dictionary(source: Dictionary) -> Dictionary:
 	# Library by stable asset_id. Bundled res:// tracks remain fully supported.
 	if source_version < 18 and not migrated.has("background_music_asset_id"):
 		migrated["background_music_asset_id"] = ""
+	# v19 makes Board storage configurable as a first-class storage root. Existing
+	# installations keep the historical user://notlight root unless legacy-storage
+	# discovery adopts an older NotLight Board directory at startup.
+	if source_version < 19 and not migrated.has("board_root"):
+		migrated["board_root"] = DEFAULT_BOARD_ROOT
 	migrated["schema_version"] = SETTINGS_SCHEMA_VERSION
 	return migrated
 
@@ -284,6 +291,7 @@ func get_snapshot() -> Dictionary:
 		"custom_texture_cache_mb": custom_texture_cache_mb,
 		"custom_drawing_quality": int(custom_drawing_quality),
 		"effective_drawing_quality": int(get_effective_drawing_quality()),
+		"board_root": board_root,
 		"library_root": library_root,
 		"module_root": module_root,
 		"compression_cpu_mode": int(compression_cpu_mode),
@@ -765,6 +773,16 @@ func set_custom_texture_cache_mb(value: int) -> void:
 	_commit_change()
 
 
+func set_board_root(value: String) -> void:
+	var normalized: String = value.strip_edges()
+	if normalized.is_empty():
+		normalized = DEFAULT_BOARD_ROOT
+	if board_root == normalized:
+		return
+	board_root = normalized
+	_commit_change()
+
+
 func set_library_root(value: String) -> void:
 	var normalized: String = value.strip_edges()
 	if normalized.is_empty():
@@ -884,6 +902,7 @@ func delete_user_drawing_preset(preset_id: String) -> bool:
 	return true
 
 func reset_defaults(save_changes: bool = true, preserve_performance: bool = false) -> void:
+	var preserved_board_root: String = board_root
 	var preserved_library_root: String = library_root
 	var preserved_module_root: String = module_root
 	var preserved_profile: PerformanceProfile = performance_profile
@@ -957,6 +976,7 @@ func reset_defaults(save_changes: bool = true, preserve_performance: bool = fals
 		custom_texture_cache_mb = preserved_texture_budget
 		custom_drawing_quality = preserved_drawing_quality
 		prefer_maximum_fps = preserved_prefer_maximum_fps
+	board_root = preserved_board_root if save_changes else DEFAULT_BOARD_ROOT
 	library_root = preserved_library_root if save_changes else DEFAULT_LIBRARY_ROOT
 	module_root = preserved_module_root if save_changes else DEFAULT_MODULE_ROOT
 	compression_cpu_mode = CompressionCpuMode.ECO
@@ -1294,6 +1314,9 @@ func _apply_dictionary(source: Dictionary) -> void:
 	custom_note_embed_rich_preview = bool(source.get("custom_note_embed_rich_preview", true))
 	custom_texture_cache_mb = clampi(int(source.get("custom_texture_cache_mb", 512)), MIN_TEXTURE_CACHE_MB, MAX_TEXTURE_CACHE_MB)
 	custom_drawing_quality = _drawing_quality_from_int(int(source.get("custom_drawing_quality", int(DrawingQuality.HIGH))))
+	board_root = str(source.get("board_root", DEFAULT_BOARD_ROOT)).strip_edges()
+	if board_root.is_empty():
+		board_root = DEFAULT_BOARD_ROOT
 	library_root = str(source.get("library_root", DEFAULT_LIBRARY_ROOT)).strip_edges()
 	if library_root.is_empty():
 		library_root = DEFAULT_LIBRARY_ROOT

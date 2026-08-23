@@ -37,18 +37,18 @@ func _ready() -> void:
 	get_window().min_size = Vector2i(960, 640)
 	_capture_frame_rate_baseline()
 
-	repository = BoardRepository.new()
-	repository.name = "BoardRepository"
-	add_child(repository)
-
 	settings = AppSettingsStore.new()
 	settings.name = "AppSettings"
 	add_child(settings)
-
-	if not repository.setup():
-		push_error(repository.get_last_error())
 	if not settings.setup():
 		push_error(settings.get_last_error())
+	_adopt_legacy_storage_roots_if_safe()
+
+	repository = BoardRepository.new()
+	repository.name = "BoardRepository"
+	add_child(repository)
+	if not repository.setup(settings.board_root):
+		push_error(repository.get_last_error())
 	_apply_application_settings(settings.get_snapshot())
 	if not settings.settings_changed.is_connected(_apply_application_settings):
 		settings.settings_changed.connect(_apply_application_settings)
@@ -144,6 +144,70 @@ func _ready() -> void:
 	_show_hub()
 
 
+func _adopt_legacy_storage_roots_if_safe() -> void:
+	if settings == null:
+		return
+	var current_user_dir: String = OS.get_user_data_dir().simplify_path()
+	var app_userdata_parent: String = current_user_dir.get_base_dir()
+	var legacy_notlight_root: String = app_userdata_parent.path_join("NotLight Board").path_join("notlight").simplify_path()
+	if not DirAccess.dir_exists_absolute(legacy_notlight_root):
+		return
+	var changed: bool = false
+	var current_board_root: String = ProjectSettings.globalize_path(AppSettingsStore.DEFAULT_BOARD_ROOT).simplify_path()
+	var legacy_board_root: String = legacy_notlight_root
+	if settings.board_root == AppSettingsStore.DEFAULT_BOARD_ROOT and not _board_storage_has_user_data(current_board_root) and _board_storage_has_user_data(legacy_board_root):
+		settings.set_board_root(legacy_board_root)
+		changed = true
+	var current_library_root: String = ProjectSettings.globalize_path(AppSettingsStore.DEFAULT_LIBRARY_ROOT).simplify_path()
+	var legacy_library_root: String = legacy_notlight_root.path_join("library")
+	if settings.library_root == AppSettingsStore.DEFAULT_LIBRARY_ROOT and not _library_storage_has_user_data(current_library_root) and _library_storage_has_user_data(legacy_library_root):
+		settings.set_library_root(legacy_library_root)
+		changed = true
+	var current_module_root: String = ProjectSettings.globalize_path(AppSettingsStore.DEFAULT_MODULE_ROOT).simplify_path()
+	var legacy_module_root: String = legacy_notlight_root.path_join("modules")
+	if settings.module_root == AppSettingsStore.DEFAULT_MODULE_ROOT and not _module_storage_has_user_data(current_module_root) and _module_storage_has_user_data(legacy_module_root):
+		settings.set_module_root(legacy_module_root)
+		changed = true
+	if changed and not settings.flush_pending_save():
+		push_error(settings.get_last_error())
+
+
+func _board_storage_has_user_data(root: String) -> bool:
+	var boards: String = root.path_join("boards")
+	if not DirAccess.dir_exists_absolute(boards):
+		return false
+	return not DirAccess.get_directories_at(boards).is_empty()
+
+
+func _library_storage_has_user_data(root: String) -> bool:
+	var catalog_path: String = root.path_join("catalog.json")
+	if not FileAccess.file_exists(catalog_path):
+		return false
+	var file: FileAccess = FileAccess.open(catalog_path, FileAccess.READ)
+	if file == null:
+		return true
+	var parsed: Variant = JSON.parse_string(file.get_as_text())
+	file.close()
+	if parsed is not Dictionary:
+		return true
+	var source: Dictionary = parsed as Dictionary
+	var assets: Variant = source.get("assets", [])
+	var folders: Variant = source.get("folders", [])
+	return (assets is Array and not (assets as Array).is_empty()) or (folders is Array and not (folders as Array).is_empty())
+
+
+func _module_storage_has_user_data(root: String) -> bool:
+	if not DirAccess.dir_exists_absolute(root):
+		return false
+	for module_id: String in DirAccess.get_directories_at(root):
+		if module_id.begins_with("."):
+			continue
+		var module_root: String = root.path_join(module_id)
+		if FileAccess.file_exists(module_root.path_join("state.json")) or DirAccess.dir_exists_absolute(module_root.path_join("versions")):
+			return true
+	return false
+
+
 func _configure_desktop_content_scaling() -> void:
 	# NotLight is a desktop productivity UI, not a fixed-aspect game viewport.
 	# Let Control anchors/layout containers consume the real window dimensions
@@ -216,47 +280,69 @@ func _notification(what: int) -> void:
 
 func _request_application_exit() -> void:
 	_flush_current_view_state()
-	# Flush canonical authored state before the final storage-location copy. A user
-	# may keep working for hours after choosing another disk; the preparation copy
-	# must therefore never become the activation source by itself.
 	if note_repository != null and not note_repository.flush_pending_saves():
 		return
 	if session != null and not session.current_board_id.is_empty():
 		if not session.close_board(true):
 			return
+	var prepared_board_root: String = ""
+	if repository != null and repository.has_prepared_external_boards():
+		var boards_finalize: Dictionary = repository.finalize_prepared_external_boards()
+		if not bool(boards_finalize.get("ok", false)):
+			push_error(str(boards_finalize.get("error", NotLightL10n.text("settings.storage.prepare_boards_failed"))))
+			return
+		prepared_board_root = str(boards_finalize.get("root", ""))
 	var prepared_library_root: String = ""
 	if asset_library != null and asset_library.has_prepared_external_library():
 		var library_finalize: Dictionary = asset_library.finalize_prepared_external_library()
 		if not bool(library_finalize.get("ok", false)):
-			push_error(str(library_finalize.get("error", NotLightL10n.text("runtime.app.app_root.1aea7f0752"))))
+			push_error(str(library_finalize.get("error", NotLightL10n.text("settings.storage.prepare_failed"))))
 			return
 		prepared_library_root = str(library_finalize.get("root", ""))
 	var prepared_module_root: String = ""
 	if module_registry != null and module_registry.has_prepared_external_modules():
 		var modules_finalize: Dictionary = module_registry.finalize_prepared_external_modules()
 		if not bool(modules_finalize.get("ok", false)):
-			push_error(str(modules_finalize.get("error", NotLightL10n.text("runtime.app.app_root.8be5eaf4da"))))
+			push_error(str(modules_finalize.get("error", NotLightL10n.text("settings.storage.prepare_modules_failed"))))
 			return
 		prepared_module_root = str(modules_finalize.get("root", ""))
+	var previous_board_root: String = settings.board_root if settings != null else ""
 	var previous_library_root: String = settings.library_root if settings != null else ""
 	var previous_module_root: String = settings.module_root if settings != null else ""
 	if settings != null:
+		if not prepared_board_root.is_empty():
+			settings.set_board_root(prepared_board_root)
 		if not prepared_library_root.is_empty():
 			settings.set_library_root(prepared_library_root)
 		if not prepared_module_root.is_empty():
 			settings.set_module_root(prepared_module_root)
 		if not settings.flush_pending_save():
-			# Never leave an in-memory new root eligible for a later timer save after a
-			# failed activation commit. Restore the still-active roots first.
+			if not prepared_board_root.is_empty():
+				settings.set_board_root(previous_board_root)
 			if not prepared_library_root.is_empty():
 				settings.set_library_root(previous_library_root)
 			if not prepared_module_root.is_empty():
 				settings.set_module_root(previous_module_root)
 			settings.flush_pending_save()
 			return
+	# The settings file now points at the verified destination. Only after that
+	# durable switch succeeds do we remove the previous source. If Windows keeps
+	# a file locked, the new location remains authoritative and the old copy is
+	# retained as a safety backup instead of risking data loss.
+	if repository != null and not prepared_board_root.is_empty():
+		var board_cleanup: Dictionary = repository.cleanup_migrated_external_board_source()
+		if not bool(board_cleanup.get("ok", false)):
+			push_warning(str(board_cleanup.get("error", NotLightL10n.text("settings.storage.cleanup_failed") % repository.get_root_directory())))
+		repository.mark_prepared_external_boards_activated()
 	if asset_library != null and not prepared_library_root.is_empty():
+		var library_cleanup: Dictionary = asset_library.cleanup_migrated_external_library_source()
+		if not bool(library_cleanup.get("ok", false)):
+			push_warning(str(library_cleanup.get("error", NotLightL10n.text("settings.storage.cleanup_failed") % asset_library.get_root_directory())))
 		asset_library.mark_prepared_external_library_activated()
 	if module_registry != null and not prepared_module_root.is_empty():
+		var module_cleanup: Dictionary = module_registry.cleanup_migrated_external_modules_source()
+		if not bool(module_cleanup.get("ok", false)):
+			push_warning(str(module_cleanup.get("error", NotLightL10n.text("settings.storage.cleanup_failed") % module_registry.get_root_directory())))
 		module_registry.mark_prepared_external_modules_activated()
 	get_tree().quit()
 
@@ -290,7 +376,7 @@ func _open_board(board_id: String) -> void:
 	board_screen.name = "BoardScreen"
 	board_screen.back_requested.connect(_return_to_hub)
 	_replace_screen(board_screen)
-	board_screen.configure(session, settings, asset_library, image_cache, pdf_media, video_media, audio_media, voice_recording, telemetry, pdf_optimizer, formula_render, power_status, module_registry, note_repository, app_audio)
+	board_screen.configure(session, settings, asset_library, image_cache, pdf_media, video_media, audio_media, voice_recording, telemetry, pdf_optimizer, formula_render, power_status, module_registry, note_repository, app_audio, repository)
 	_transition_blocker = false
 
 

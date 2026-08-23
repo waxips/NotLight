@@ -19,6 +19,7 @@ var power_status: PowerStatusService
 var module_registry: ModuleRegistry
 var note_repository: NoteRepository
 var telemetry: PerformanceTelemetryService
+var repository: BoardRepository
 var _board_view: NativeBoardView
 var _video_player_pool: VideoPlayerPool
 var _audio_player_pool: AudioPlayerPool
@@ -167,7 +168,8 @@ func configure(
 	power_service: PowerStatusService = null,
 	module_registry_service: ModuleRegistry = null,
 	note_repository_service: NoteRepository = null,
-	app_audio_service: AppAudioService = null
+	app_audio_service: AppAudioService = null,
+	board_repository_service: BoardRepository = null
 ) -> void:
 	session = board_session
 	settings = app_settings
@@ -183,6 +185,7 @@ func configure(
 	module_registry = module_registry_service
 	note_repository = note_repository_service
 	app_audio = app_audio_service
+	repository = board_repository_service
 	telemetry = telemetry_service
 	if telemetry != null:
 		telemetry.set_developer_context_provider(Callable(self, "_developer_diagnostics_context"))
@@ -204,7 +207,7 @@ func configure(
 		settings.settings_error.connect(_show_error)
 	if not _board_view.interaction_activity.is_connected(_on_board_interaction_activity):
 		_board_view.interaction_activity.connect(_on_board_interaction_activity)
-	_settings_dialog.configure(settings, asset_library, video_media, false, module_registry, app_audio)
+	_settings_dialog.configure(settings, asset_library, video_media, false, module_registry, app_audio, repository)
 	settings.apply_render_policy(session.runtime.render_policy)
 	if _asset_view != null and asset_library != null:
 		_asset_view.configure(asset_library, image_cache, video_media, settings, audio_media, null, pdf_media, pdf_optimizer)

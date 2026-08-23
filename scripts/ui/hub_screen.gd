@@ -112,7 +112,7 @@ func configure(
 	if _module_preview != null:
 		_module_preview.configure(module_registry)
 	if settings != null:
-		_settings_dialog.configure(settings, asset_library, video_media, true, module_registry, app_audio)
+		_settings_dialog.configure(settings, asset_library, video_media, true, module_registry, app_audio, repository)
 		if not settings.settings_error.is_connected(_show_error):
 			settings.settings_error.connect(_show_error)
 	var window: Window = get_window()

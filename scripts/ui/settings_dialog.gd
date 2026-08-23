@@ -8,11 +8,13 @@ const PAGE_AUDIO: int = 2
 const PAGE_PERFORMANCE: int = 3
 const PAGE_STORAGE: int = 4
 const PAGE_DEVELOPER: int = 5
-const STORAGE_TARGET_LIBRARY: int = 0
-const STORAGE_TARGET_MODULES: int = 1
+const STORAGE_TARGET_BOARDS: int = 0
+const STORAGE_TARGET_LIBRARY: int = 1
+const STORAGE_TARGET_MODULES: int = 2
 
 var settings: AppSettingsStore
 var library: AssetLibraryService
+var repository: BoardRepository
 var video_media: VideoMediaService
 var module_registry: ModuleRegistry
 var app_audio: AppAudioService
@@ -65,6 +67,8 @@ var _texture_budget_spin: SpinBox
 var _monitor_checks: Dictionary = {}
 var _monitor_interval: OptionButton
 var _developer_diagnostics_check: CheckBox
+var _board_path_label: Label
+var _board_storage_status_label: Label
 var _library_path_label: Label
 var _storage_status_label: Label
 var _module_path_label: Label
@@ -72,7 +76,7 @@ var _module_storage_status_label: Label
 var _compression_cpu_option: OptionButton
 var _auto_optimize_video_check: CheckBox
 var _folder_dialog: FileDialog
-var _storage_dialog_target: int = STORAGE_TARGET_LIBRARY
+var _storage_dialog_target: int = STORAGE_TARGET_BOARDS
 var _syncing: bool = false
 
 
@@ -99,10 +103,12 @@ func configure(
 	media_service: VideoMediaService = null,
 	performance_editable: bool = true,
 	module_registry_service: ModuleRegistry = null,
-	app_audio_service: AppAudioService = null
+	app_audio_service: AppAudioService = null,
+	board_repository_service: BoardRepository = null
 ) -> void:
 	settings = settings_store
 	library = library_service
+	repository = board_repository_service
 	video_media = media_service
 	module_registry = module_registry_service
 	if app_audio != null and app_audio.bundled_tracks_changed.is_connected(_on_bundled_tracks_changed):
@@ -604,67 +610,20 @@ func _build_performance_page(parent: VBoxContainer) -> void:
 
 func _build_storage_page(parent: VBoxContainer) -> void:
 	_add_page_heading(parent, NotLightL10n.text("settings.storage.title"), NotLightL10n.text("settings.storage.description"))
+	var board_section: VBoxContainer = _make_section(parent, NotLightL10n.text("settings.storage.boards"), NotLightL10n.text("settings.storage.boards_help"))
+	var board_widgets: Dictionary = _build_storage_location_controls(board_section, _choose_board_location, _open_board_folder)
+	_board_path_label = board_widgets.get("path") as Label
+	_board_storage_status_label = board_widgets.get("status") as Label
+
 	var storage_section: VBoxContainer = _make_section(parent, NotLightL10n.text("settings.storage.library"), NotLightL10n.text("settings.storage.library_help"))
-	var location_panel: PanelContainer = _make_row_panel(storage_section)
-	var location_root: VBoxContainer = VBoxContainer.new()
-	location_root.add_theme_constant_override("separation", 8)
-	location_panel.add_child(location_root)
-	var location_title: Label = Label.new()
-	NotLightL10n.bind_text(location_title, "settings.storage.current")
-	location_title.theme_type_variation = "SettingsRowTitleLabel"
-	location_root.add_child(location_title)
-	_library_path_label = Label.new()
-	_library_path_label.theme_type_variation = "CaptionLabel"
-	_library_path_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	location_root.add_child(_library_path_label)
-	var buttons: HBoxContainer = HBoxContainer.new()
-	buttons.add_theme_constant_override("separation", 8)
-	location_root.add_child(buttons)
-	var choose_button: Button = Button.new()
-	NotLightL10n.bind_text(choose_button, "settings.storage.choose")
-	choose_button.theme_type_variation = "PrimaryButton"
-	choose_button.pressed.connect(_choose_library_location)
-	buttons.add_child(choose_button)
-	var open_button: Button = Button.new()
-	NotLightL10n.bind_text(open_button, "settings.storage.open")
-	open_button.theme_type_variation = "GhostButton"
-	open_button.pressed.connect(_open_library_folder)
-	buttons.add_child(open_button)
-	_storage_status_label = Label.new()
-	_storage_status_label.theme_type_variation = "CaptionLabel"
-	_storage_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	location_root.add_child(_storage_status_label)
+	var library_widgets: Dictionary = _build_storage_location_controls(storage_section, _choose_library_location, _open_library_folder)
+	_library_path_label = library_widgets.get("path") as Label
+	_storage_status_label = library_widgets.get("status") as Label
 
 	var module_section: VBoxContainer = _make_section(parent, NotLightL10n.text("settings.storage.modules"), NotLightL10n.text("settings.storage.modules_help"))
-	var module_panel: PanelContainer = _make_row_panel(module_section)
-	var module_root: VBoxContainer = VBoxContainer.new()
-	module_root.add_theme_constant_override("separation", 8)
-	module_panel.add_child(module_root)
-	var module_title: Label = Label.new()
-	NotLightL10n.bind_text(module_title, "settings.storage.current")
-	module_title.theme_type_variation = "SettingsRowTitleLabel"
-	module_root.add_child(module_title)
-	_module_path_label = Label.new()
-	_module_path_label.theme_type_variation = "CaptionLabel"
-	_module_path_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	module_root.add_child(_module_path_label)
-	var module_buttons: HBoxContainer = HBoxContainer.new()
-	module_buttons.add_theme_constant_override("separation", 8)
-	module_root.add_child(module_buttons)
-	var module_choose_button: Button = Button.new()
-	NotLightL10n.bind_text(module_choose_button, "settings.storage.choose")
-	module_choose_button.theme_type_variation = "PrimaryButton"
-	module_choose_button.pressed.connect(_choose_module_location)
-	module_buttons.add_child(module_choose_button)
-	var module_open_button: Button = Button.new()
-	NotLightL10n.bind_text(module_open_button, "settings.storage.open")
-	module_open_button.theme_type_variation = "GhostButton"
-	module_open_button.pressed.connect(_open_module_folder)
-	module_buttons.add_child(module_open_button)
-	_module_storage_status_label = Label.new()
-	_module_storage_status_label.theme_type_variation = "CaptionLabel"
-	_module_storage_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	module_root.add_child(_module_storage_status_label)
+	var module_widgets: Dictionary = _build_storage_location_controls(module_section, _choose_module_location, _open_module_folder)
+	_module_path_label = module_widgets.get("path") as Label
+	_module_storage_status_label = module_widgets.get("status") as Label
 
 	var cpu_section: VBoxContainer = _make_section(parent, NotLightL10n.text("settings.storage.video"), NotLightL10n.text("settings.storage.video_help"))
 	_compression_cpu_option = _add_option_row(cpu_section, NotLightL10n.text("settings.storage.cpu_load"), NotLightL10n.text("settings.storage.cpu_help"))
@@ -674,6 +633,39 @@ func _build_storage_page(parent: VBoxContainer) -> void:
 	_compression_cpu_option.item_selected.connect(_on_compression_cpu_selected)
 	_auto_optimize_video_check = _add_toggle_row(cpu_section, NotLightL10n.text("settings.storage.auto_video"), NotLightL10n.text("settings.storage.auto_video_help"))
 	_auto_optimize_video_check.toggled.connect(_on_auto_optimize_video_toggled)
+
+
+func _build_storage_location_controls(section: VBoxContainer, choose_callable: Callable, open_callable: Callable) -> Dictionary:
+	var panel: PanelContainer = _make_row_panel(section)
+	var root: VBoxContainer = VBoxContainer.new()
+	root.add_theme_constant_override("separation", 8)
+	panel.add_child(root)
+	var title: Label = Label.new()
+	NotLightL10n.bind_text(title, "settings.storage.current")
+	title.theme_type_variation = "SettingsRowTitleLabel"
+	root.add_child(title)
+	var path_label: Label = Label.new()
+	path_label.theme_type_variation = "CaptionLabel"
+	path_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	root.add_child(path_label)
+	var buttons: HBoxContainer = HBoxContainer.new()
+	buttons.add_theme_constant_override("separation", 8)
+	root.add_child(buttons)
+	var choose_button: Button = Button.new()
+	NotLightL10n.bind_text(choose_button, "settings.storage.choose")
+	choose_button.theme_type_variation = "PrimaryButton"
+	choose_button.pressed.connect(choose_callable)
+	buttons.add_child(choose_button)
+	var open_button: Button = Button.new()
+	NotLightL10n.bind_text(open_button, "settings.storage.open")
+	open_button.theme_type_variation = "GhostButton"
+	open_button.pressed.connect(open_callable)
+	buttons.add_child(open_button)
+	var status: Label = Label.new()
+	status.theme_type_variation = "CaptionLabel"
+	status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	root.add_child(status)
+	return {"path": path_label, "status": status}
 
 
 func _build_developer_page(parent: VBoxContainer) -> void:
@@ -729,7 +721,9 @@ func _build_folder_dialog() -> void:
 	_folder_dialog.title = NotLightL10n.text("settings.storage.choose")
 	_folder_dialog.file_mode = FileDialog.FILE_MODE_OPEN_DIR
 	_folder_dialog.access = FileDialog.ACCESS_FILESYSTEM
-	_folder_dialog.use_native_dialog = true
+	# The Godot dialog is deterministic across editor/export and allows choosing
+	# exact existing library roots such as the legacy .../notlight/library path.
+	_folder_dialog.use_native_dialog = false
 	_folder_dialog.dir_selected.connect(_on_storage_directory_selected)
 	add_child(_folder_dialog)
 
@@ -991,6 +985,9 @@ func _refresh(snapshot: Dictionary) -> void:
 	_select_item_by_metadata(_monitor_interval, float(snapshot.get("monitor_interval_seconds", 1.0)))
 	if _developer_diagnostics_check != null:
 		_developer_diagnostics_check.button_pressed = bool(snapshot.get("developer_diagnostics_enabled", false))
+	if _board_path_label != null:
+		var board_root_path: String = str(snapshot.get("board_root", AppSettingsStore.DEFAULT_BOARD_ROOT))
+		_board_path_label.text = ProjectSettings.globalize_path(board_root_path) if board_root_path.begins_with("user://") or board_root_path.begins_with("res://") else board_root_path
 	if _library_path_label != null:
 		var root_path: String = str(snapshot.get("library_root", AppSettingsStore.DEFAULT_LIBRARY_ROOT))
 		_library_path_label.text = ProjectSettings.globalize_path(root_path) if root_path.begins_with("user://") or root_path.begins_with("res://") else root_path
@@ -1393,18 +1390,39 @@ func _on_auto_optimize_video_toggled(value: bool) -> void:
 		settings.set_auto_optimize_video(value)
 
 
+func _choose_board_location() -> void:
+	_storage_dialog_target = STORAGE_TARGET_BOARDS
+	_open_storage_picker(NotLightL10n.text("settings.storage.choose_boards"), settings.board_root if settings != null else "")
+
+
+func _open_storage_picker(title_text: String, current_root: String) -> void:
+	if _folder_dialog == null:
+		return
+	_folder_dialog.title = title_text
+	var current_abs: String = current_root.strip_edges()
+	if current_abs.begins_with("user://") or current_abs.begins_with("res://"):
+		current_abs = ProjectSettings.globalize_path(current_abs)
+	if DirAccess.dir_exists_absolute(current_abs):
+		_folder_dialog.current_dir = current_abs
+	elif DirAccess.dir_exists_absolute(current_abs.get_base_dir()):
+		_folder_dialog.current_dir = current_abs.get_base_dir()
+	_folder_dialog.popup_centered_ratio(0.72)
+
+
 func _choose_library_location() -> void:
 	_storage_dialog_target = STORAGE_TARGET_LIBRARY
-	if _folder_dialog != null:
-		_folder_dialog.title = NotLightL10n.text("settings.storage.choose_library")
-		_folder_dialog.popup_centered_ratio(0.72)
+	_open_storage_picker(NotLightL10n.text("settings.storage.choose_library"), settings.library_root if settings != null else "")
 
 
 func _choose_module_location() -> void:
 	_storage_dialog_target = STORAGE_TARGET_MODULES
-	if _folder_dialog != null:
-		_folder_dialog.title = NotLightL10n.text("settings.storage.choose_modules")
-		_folder_dialog.popup_centered_ratio(0.72)
+	_open_storage_picker(NotLightL10n.text("settings.storage.choose_modules"), settings.module_root if settings != null else "")
+
+
+func _open_board_folder() -> void:
+	if settings == null:
+		return
+	_open_storage_path(settings.board_root)
 
 
 func _open_library_folder() -> void:
@@ -1429,10 +1447,31 @@ func _open_storage_path(raw_path: String) -> void:
 
 
 func _on_storage_directory_selected(path: String) -> void:
-	if _storage_dialog_target == STORAGE_TARGET_MODULES:
-		_prepare_module_storage(path)
+	match _storage_dialog_target:
+		STORAGE_TARGET_BOARDS:
+			_prepare_board_storage(path)
+		STORAGE_TARGET_MODULES:
+			_prepare_module_storage(path)
+		_:
+			_prepare_library_storage(path)
+
+
+func _prepare_board_storage(path: String) -> void:
+	if repository == null or settings == null or _board_storage_status_label == null:
+		return
+	NotLightL10n.bind_text(_board_storage_status_label, "settings.storage.copying_boards")
+	var result: Dictionary = repository.prepare_external_boards(path)
+	if not bool(result.get("ok", false)):
+		_board_storage_status_label.text = str(result.get("error", NotLightL10n.text("settings.storage.prepare_boards_failed")))
+		return
+	var new_root: String = str(result.get("root", ""))
+	var copied_files: int = int(result.get("copied_files", 0))
+	if bool(result.get("same_location", false)):
+		NotLightL10n.bind_text(_board_storage_status_label, "settings.storage.same_location")
+	elif bool(result.get("existing", false)):
+		_board_storage_status_label.text = NotLightL10n.text("settings.storage.boards_existing_restart", {"path": new_root})
 	else:
-		_prepare_library_storage(path)
+		_board_storage_status_label.text = NotLightL10n.text("settings.storage.boards_copy_done_restart", {"count": copied_files, "path": new_root})
 
 
 func _prepare_library_storage(path: String) -> void:
@@ -1453,6 +1492,8 @@ func _prepare_library_storage(path: String) -> void:
 	var copied_files: int = int(result.get("copied_files", 0))
 	if bool(result.get("same_location", false)):
 		NotLightL10n.bind_text(_storage_status_label, "settings.storage.same_location")
+	elif bool(result.get("adopted", false)):
+		_storage_status_label.text = NotLightL10n.text("settings.storage.existing_adopt_restart", {"path": new_root})
 	elif bool(result.get("existing", false)):
 		_storage_status_label.text = NotLightL10n.text("settings.storage.existing_found_restart", {"path": new_root})
 	else:
@@ -1471,6 +1512,8 @@ func _prepare_module_storage(path: String) -> void:
 	var copied_files: int = int(result.get("copied_files", 0))
 	if bool(result.get("same_location", false)):
 		NotLightL10n.bind_text(_module_storage_status_label, "settings.storage.same_location")
+	elif bool(result.get("adopted", false)):
+		_module_storage_status_label.text = NotLightL10n.text("settings.storage.existing_adopt_restart", {"path": new_root})
 	elif bool(result.get("existing", false)):
 		_module_storage_status_label.text = NotLightL10n.text("settings.storage.modules_existing_restart", {"path": new_root})
 	else:

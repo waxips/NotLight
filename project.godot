@@ -33,6 +33,9 @@ window/size/window_height_override=900
 window/handheld/orientation=1
 window/size/window_mode=0
 
+[dotnet]
+
+project/assembly_name="NotLight"
 
 [editor_plugins]
 

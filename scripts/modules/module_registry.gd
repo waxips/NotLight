@@ -29,6 +29,7 @@ var _last_error: String = ""
 var _root_dir: String = ROOT_DIR
 var _prepared_external_root: String = ""
 var _prepared_external_fingerprint: String = ""
+var _prepared_external_adopt_existing: bool = false
 
 
 func configure(board_repository: BoardRepository, module_root: String = ROOT_DIR) -> void:
@@ -195,60 +196,77 @@ func get_staging_directory() -> String:
 	return _root_dir.path_join(".staging")
 
 
-func prepare_external_modules(parent_directory: String) -> Dictionary:
-	# Module packages contain trusted executable extensions, so migration is
-	# deliberately copy-first: the active source stays untouched until the target
-	# tree has been byte-compared. The settings switch takes effect after restart.
-	var parent: String = parent_directory.strip_edges()
-	if parent.is_empty():
-		return {"ok": false, "error": NotLightL10n.text("runtime.modules.module_registry.386bc509c7")}
-	if parent.begins_with("res://") or parent.begins_with("user://"):
-		parent = ProjectSettings.globalize_path(parent)
-	var parent_abs: String = parent.simplify_path()
-	if not DirAccess.dir_exists_absolute(parent_abs):
-		return {"ok": false, "error": NotLightL10n.text("runtime.modules.module_registry.94fbeff55a")}
+func prepare_external_modules(selected_directory: String) -> Dictionary:
+	var selected: String = selected_directory.strip_edges()
+	if selected.is_empty():
+		return {"ok": false, "error": NotLightL10n.text("settings.storage.prepare_modules_failed")}
+	if selected.begins_with("res://") or selected.begins_with("user://"):
+		selected = ProjectSettings.globalize_path(selected)
+	var selected_abs: String = selected.simplify_path()
+	if not DirAccess.dir_exists_absolute(selected_abs):
+		return {"ok": false, "error": NotLightL10n.text("settings.storage.folder_missing") % selected_abs}
 	var source_root: String = ProjectSettings.globalize_path(_root_dir).simplify_path()
-	var destination: String = parent_abs.path_join("NotLightModules")
+	var destination: String = _resolve_external_module_destination(selected_abs, source_root)
 	if _storage_path_key(destination) == _storage_path_key(source_root):
 		_prepared_external_root = ""
 		_prepared_external_fingerprint = ""
+		_prepared_external_adopt_existing = false
 		return {"ok": true, "root": destination, "existing": true, "same_location": true, "restart_required": false}
-	if _path_is_inside(parent_abs, source_root):
-		return {"ok": false, "error": NotLightL10n.text("runtime.modules.module_registry.956d15ca74")}
-	var writable_error: String = _probe_writable_directory(parent_abs)
+	if _path_is_inside(destination, source_root) or _path_is_inside(source_root, destination):
+		return {"ok": false, "error": NotLightL10n.text("settings.storage.overlap_error")}
+	var parent: String = destination.get_base_dir()
+	if not DirAccess.dir_exists_absolute(parent):
+		return {"ok": false, "error": NotLightL10n.text("settings.storage.folder_missing") % parent}
+	var writable_error: String = _probe_writable_directory(parent)
 	if not writable_error.is_empty():
 		return {"ok": false, "error": writable_error}
+	var destination_should_be_replaced: bool = false
 	if DirAccess.dir_exists_absolute(destination):
-		if not _directory_trees_equal(source_root, destination, 0):
-			return {"ok": false, "error": NotLightL10n.text("runtime.modules.module_registry.5fe829b253")}
-		_prepared_external_root = destination
-		_prepared_external_fingerprint = _directory_tree_fingerprint(destination, 0)
-		return {"ok": true, "root": destination, "existing": true, "restart_required": true}
-	var staging: String = parent_abs.path_join(".notlight_modules_staging")
+		if _directory_is_empty_absolute(destination):
+			destination_should_be_replaced = true
+		else:
+			var destination_fingerprint: String = _directory_tree_fingerprint(destination, 0)
+			if destination_fingerprint.is_empty():
+				return {"ok": false, "error": NotLightL10n.text("settings.storage.existing_invalid") % destination}
+			var source_has_content: bool = _module_storage_has_content(source_root)
+			var destination_has_content: bool = _module_storage_has_content(destination)
+			if not source_has_content:
+				_prepared_external_root = destination
+				_prepared_external_fingerprint = destination_fingerprint
+				_prepared_external_adopt_existing = true
+				return {"ok": true, "root": destination, "existing": true, "adopted": true, "restart_required": true}
+			if not destination_has_content:
+				destination_should_be_replaced = true
+			elif _directory_tree_fingerprint(source_root, 0) != destination_fingerprint:
+				return {"ok": false, "error": NotLightL10n.text("settings.storage.populated_conflict")}
+			else:
+				_prepared_external_root = destination
+				_prepared_external_fingerprint = destination_fingerprint
+				_prepared_external_adopt_existing = false
+				return {"ok": true, "root": destination, "existing": true, "restart_required": true}
+	if destination_should_be_replaced and DirAccess.dir_exists_absolute(destination):
+		if not _delete_directory_recursive_absolute(destination):
+			return {"ok": false, "error": NotLightL10n.text("settings.storage.prepare_modules_failed")}
+	var token: String = AssetId.make_temporary_id("modules-stage")
+	var staging: String = parent.path_join(".notlight_modules_staging_%s" % token)
 	if DirAccess.dir_exists_absolute(staging):
 		_delete_directory_recursive_absolute(staging)
 	if DirAccess.make_dir_recursive_absolute(staging) != OK:
-		return {"ok": false, "error": NotLightL10n.text("runtime.modules.module_registry.7be9474a89")}
+		return {"ok": false, "error": NotLightL10n.text("settings.storage.prepare_modules_failed")}
 	var copy_result: Dictionary = _copy_directory_tree_verified(source_root, staging, 0)
 	if not bool(copy_result.get("ok", false)):
 		_delete_directory_recursive_absolute(staging)
 		return copy_result
 	if not _directory_trees_equal(source_root, staging, 0):
 		_delete_directory_recursive_absolute(staging)
-		return {"ok": false, "error": NotLightL10n.text("runtime.modules.module_registry.d8a5bc0ff5")}
+		return {"ok": false, "error": NotLightL10n.text("settings.storage.verify_failed") % destination}
 	if DirAccess.rename_absolute(staging, destination) != OK:
 		_delete_directory_recursive_absolute(staging)
-		return {"ok": false, "error": NotLightL10n.text("runtime.modules.module_registry.ed573dd261")}
+		return {"ok": false, "error": NotLightL10n.text("settings.storage.prepare_modules_failed")}
 	_prepared_external_root = destination
 	_prepared_external_fingerprint = _directory_tree_fingerprint(destination, 0)
-	return {
-		"ok": true,
-		"root": destination,
-		"existing": false,
-		"restart_required": true,
-		"copied_files": int(copy_result.get("files", 0)),
-		"copied_bytes": int(copy_result.get("bytes", 0)),
-	}
+	_prepared_external_adopt_existing = false
+	return {"ok": true, "root": destination, "existing": false, "restart_required": true, "copied_files": int(copy_result.get("files", 0)), "copied_bytes": int(copy_result.get("bytes", 0))}
 
 
 func has_prepared_external_modules() -> bool:
@@ -260,62 +278,75 @@ func get_prepared_external_modules_root() -> String:
 
 
 func finalize_prepared_external_modules() -> Dictionary:
-	# Trusted executable packages may change after the user chose another disk.
-	# Finalize from the still-active source at clean shutdown so the next launch
-	# never switches to a stale module tree.
 	if _prepared_external_root.is_empty():
 		return {"ok": true, "root": "", "changed": false}
 	var source_root: String = ProjectSettings.globalize_path(_root_dir).simplify_path()
 	var destination: String = _prepared_external_root.simplify_path()
 	if _storage_path_key(source_root) == _storage_path_key(destination):
 		return {"ok": true, "root": destination, "changed": false}
+	if not DirAccess.dir_exists_absolute(destination):
+		return {"ok": false, "error": NotLightL10n.text("settings.storage.folder_missing") % destination}
+	var current_fingerprint: String = _directory_tree_fingerprint(destination, 0)
+	if current_fingerprint.is_empty():
+		return {"ok": false, "error": NotLightL10n.text("settings.storage.existing_invalid") % destination}
+	if not _prepared_external_fingerprint.is_empty() and current_fingerprint != _prepared_external_fingerprint:
+		return {"ok": false, "error": NotLightL10n.text("settings.storage.destination_changed")}
+	if _prepared_external_adopt_existing:
+		return {"ok": true, "root": destination, "changed": true, "adopted": true}
 	var parent: String = destination.get_base_dir()
-	if not DirAccess.dir_exists_absolute(parent):
-		return {"ok": false, "error": NotLightL10n.text("runtime.modules.module_registry.64ecf5e23b")}
 	var writable_error: String = _probe_writable_directory(parent)
 	if not writable_error.is_empty():
 		return {"ok": false, "error": writable_error}
-	if DirAccess.dir_exists_absolute(destination):
-		var current_fingerprint: String = _directory_tree_fingerprint(destination, 0)
-		if current_fingerprint.is_empty():
-			return {"ok": false, "error": NotLightL10n.text("runtime.modules.module_registry.7df3870e18")}
-		if not _prepared_external_fingerprint.is_empty() and current_fingerprint != _prepared_external_fingerprint:
-			return {"ok": false, "error": NotLightL10n.text("runtime.modules.module_registry.7585d15493")}
 	var token: String = AssetId.make_temporary_id("modules-finalize")
 	var staging: String = parent.path_join(".notlight_modules_finalize_%s" % token)
 	var backup: String = parent.path_join(".notlight_modules_previous_%s" % token)
-	if DirAccess.make_dir_recursive_absolute(staging) != OK:
-		return {"ok": false, "error": NotLightL10n.text("runtime.modules.module_registry.ac0d6f1296")}
 	var copy_result: Dictionary = _copy_directory_tree_verified(source_root, staging, 0)
 	if not bool(copy_result.get("ok", false)):
 		_delete_directory_recursive_absolute(staging)
 		return copy_result
 	if not _directory_trees_equal(source_root, staging, 0):
 		_delete_directory_recursive_absolute(staging)
-		return {"ok": false, "error": NotLightL10n.text("runtime.modules.module_registry.236d09cc99")}
+		return {"ok": false, "error": NotLightL10n.text("settings.storage.verify_failed") % destination}
 	var had_destination: bool = DirAccess.dir_exists_absolute(destination)
 	if had_destination and DirAccess.rename_absolute(destination, backup) != OK:
 		_delete_directory_recursive_absolute(staging)
-		return {"ok": false, "error": NotLightL10n.text("runtime.modules.module_registry.5f808d1eac")}
+		return {"ok": false, "error": NotLightL10n.text("settings.storage.prepare_modules_failed")}
 	if DirAccess.rename_absolute(staging, destination) != OK:
 		if had_destination:
 			DirAccess.rename_absolute(backup, destination)
 		_delete_directory_recursive_absolute(staging)
-		return {"ok": false, "error": NotLightL10n.text("runtime.modules.module_registry.3d6c3280a6")}
+		return {"ok": false, "error": NotLightL10n.text("settings.storage.prepare_modules_failed")}
 	if not _directory_trees_equal(source_root, destination, 0):
 		_delete_directory_recursive_absolute(destination)
 		if had_destination:
 			DirAccess.rename_absolute(backup, destination)
-		return {"ok": false, "error": NotLightL10n.text("runtime.modules.module_registry.540632c4bb")}
+		return {"ok": false, "error": NotLightL10n.text("settings.storage.verify_failed") % destination}
 	if had_destination:
 		_delete_directory_recursive_absolute(backup)
 	_prepared_external_fingerprint = _directory_tree_fingerprint(destination, 0)
 	return {"ok": true, "root": destination, "changed": true}
 
 
+func cleanup_migrated_external_modules_source() -> Dictionary:
+	if _prepared_external_root.is_empty() or _prepared_external_adopt_existing:
+		return {"ok": true, "removed": false}
+	var source_root: String = ProjectSettings.globalize_path(_root_dir).simplify_path()
+	var destination: String = _prepared_external_root.simplify_path()
+	if _storage_path_key(source_root) == _storage_path_key(destination):
+		return {"ok": true, "removed": false}
+	if _path_is_inside(destination, source_root) or _path_is_inside(source_root, destination):
+		return {"ok": false, "error": NotLightL10n.text("settings.storage.overlap_error")}
+	if not DirAccess.dir_exists_absolute(destination) or _directory_tree_fingerprint(destination, 0).is_empty():
+		return {"ok": false, "error": NotLightL10n.text("settings.storage.existing_invalid") % destination}
+	if DirAccess.dir_exists_absolute(source_root) and not _delete_directory_recursive_absolute(source_root):
+		return {"ok": false, "error": NotLightL10n.text("settings.storage.cleanup_failed") % source_root}
+	return {"ok": true, "removed": true, "source": source_root}
+
+
 func mark_prepared_external_modules_activated() -> void:
 	_prepared_external_root = ""
 	_prepared_external_fingerprint = ""
+	_prepared_external_adopt_existing = false
 
 
 func state_snapshot(module_id: String) -> Dictionary:
@@ -734,6 +765,46 @@ func _normalize_state(module_id: String, source: Dictionary) -> Dictionary:
 		"pending_remove": bool(source.get("pending_remove", false)),
 		"last_error": str(source.get("last_error", "")).left(1000),
 	}
+
+
+func _resolve_external_module_destination(selected_abs: String, source_root: String) -> String:
+	if _storage_path_key(selected_abs) == _storage_path_key(source_root):
+		return selected_abs
+	var leaf: String = selected_abs.get_file().to_lower()
+	if leaf == "modules" or leaf == "notlightmodules" or _module_storage_has_content(selected_abs):
+		return selected_abs
+	for relative: String in ["modules", "NotLightModules", "notlight/modules"]:
+		var candidate: String = selected_abs.path_join(relative).simplify_path()
+		if DirAccess.dir_exists_absolute(candidate) and _module_storage_has_content(candidate):
+			return candidate
+	return selected_abs.path_join("NotLightModules").simplify_path()
+
+
+func _module_storage_has_content(root: String) -> bool:
+	if not DirAccess.dir_exists_absolute(root):
+		return false
+	for entry: String in DirAccess.get_directories_at(root):
+		if entry.begins_with("."):
+			continue
+		var module_root: String = root.path_join(entry)
+		if FileAccess.file_exists(module_root.path_join(STATE_FILE)) or DirAccess.dir_exists_absolute(module_root.path_join(VERSIONS_DIR)):
+			return true
+	return false
+
+
+func _directory_is_empty_absolute(path: String) -> bool:
+	var directory: DirAccess = DirAccess.open(path)
+	if directory == null:
+		return false
+	directory.list_dir_begin()
+	var entry: String = directory.get_next()
+	while not entry.is_empty():
+		if entry != "." and entry != "..":
+			directory.list_dir_end()
+			return false
+		entry = directory.get_next()
+	directory.list_dir_end()
+	return true
 
 
 func _path_is_inside(candidate: String, parent: String) -> bool:

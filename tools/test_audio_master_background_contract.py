@@ -19,7 +19,7 @@ def read(relative: str) -> str:
 def test_settings_schema_library_selection_and_interactive_debounce() -> None:
     settings = read("scripts/settings/app_settings_store.gd")
     for term in (
-        "const SETTINGS_SCHEMA_VERSION: int = 18",
+        "const SETTINGS_SCHEMA_VERSION: int = 19",
         "const DEFAULT_AUDIO_MASTER_VOLUME: float = 1.0",
         "const INTERACTIVE_BROADCAST_DEBOUNCE_SECONDS: float = 0.08",
         "var audio_master_enabled: bool = true",

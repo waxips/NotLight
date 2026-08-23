@@ -1743,7 +1743,7 @@ def validate() -> list[str]:
 
     settings_text = (ROOT / "scripts/settings/app_settings_store.gd").read_text(encoding="utf-8")
     for required_term in (
-        "SETTINGS_SCHEMA_VERSION: int = 18",
+        "SETTINGS_SCHEMA_VERSION: int = 19",
         "WindowModePreference",
         "PerformanceProfile",
         "get_performance_budget",
@@ -4489,7 +4489,7 @@ def main() -> int:
             if required_term not in stage119_preview:
                 fail(f"Stage 11.9 bounded Notes media budget contract is missing: {required_term}", failures)
         for required_term in (
-            "const SETTINGS_SCHEMA_VERSION: int = 18",
+            "const SETTINGS_SCHEMA_VERSION: int = 19",
             "const MAX_NOTE_EMBED_LIVE_MEDIA: int = 64",
             "custom_note_embed_rich_preview",
         ):

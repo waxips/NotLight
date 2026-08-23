@@ -37,6 +37,7 @@ var _initialized: bool = false
 var _root_dir: String = ROOT_DIR
 var _prepared_external_root: String = ""
 var _prepared_external_catalog_sha256: String = ""
+var _prepared_external_adopt_existing: bool = false
 
 
 func setup(board_repository: BoardRepository, library_root: String = ROOT_DIR) -> bool:
@@ -480,70 +481,90 @@ func replace_asset_primary_blob(
 	return true
 
 
-func prepare_external_library(parent_directory: String) -> Dictionary:
-	# Stage-7 migration is intentionally conservative: copy into a dedicated
-	# NotLightLibrary child, keep the current library untouched, and only switch
-	# settings after a complete copy succeeds.
+func prepare_external_library(selected_directory: String) -> Dictionary:
+	# Storage migration is copy-first. Existing libraries can be adopted without
+	# overwriting them only when the currently active library has no user data.
 	if not _require_ready():
 		return {"ok": false, "error": get_last_error()}
-	var parent: String = parent_directory.strip_edges()
-	if parent.is_empty():
-		return {"ok": false, "error": NotLightL10n.text("runtime.assets.asset_library_service.1fcce131db")}
-	if parent.begins_with("res://") or parent.begins_with("user://"):
-		parent = ProjectSettings.globalize_path(parent)
-	var parent_abs: String = parent.simplify_path()
-	if not DirAccess.dir_exists_absolute(parent_abs):
-		return {"ok": false, "error": NotLightL10n.text("runtime.assets.asset_library_service.1f700bbf3f")}
-	var destination: String = parent_abs.path_join("NotLightLibrary")
-	var destination_catalog: String = destination.path_join(CATALOG_FILE)
+	var selected: String = selected_directory.strip_edges()
+	if selected.is_empty():
+		return {"ok": false, "error": NotLightL10n.text("settings.storage.prepare_failed")}
+	if selected.begins_with("res://") or selected.begins_with("user://"):
+		selected = ProjectSettings.globalize_path(selected)
+	var selected_abs: String = selected.simplify_path()
+	if not DirAccess.dir_exists_absolute(selected_abs):
+		return {"ok": false, "error": NotLightL10n.text("settings.storage.folder_missing") % selected_abs}
 	var source_root: String = ProjectSettings.globalize_path(_root_dir).simplify_path()
+	var destination: String = _resolve_external_library_destination(selected_abs, source_root)
 	if _storage_path_key(destination) == _storage_path_key(source_root):
 		_prepared_external_root = ""
 		_prepared_external_catalog_sha256 = ""
+		_prepared_external_adopt_existing = false
 		return {"ok": true, "root": destination, "existing": true, "same_location": true, "restart_required": false}
-	if _path_is_inside(parent_abs, source_root):
-		return {"ok": false, "error": NotLightL10n.text("runtime.assets.asset_library_service.93004ab9b8")}
-	var writable_error: String = _probe_writable_directory(parent_abs)
+	if _path_is_inside(destination, source_root) or _path_is_inside(source_root, destination):
+		return {"ok": false, "error": NotLightL10n.text("settings.storage.overlap_error")}
+	var parent: String = destination.get_base_dir()
+	if not DirAccess.dir_exists_absolute(parent):
+		return {"ok": false, "error": NotLightL10n.text("settings.storage.folder_missing") % parent}
+	var writable_error: String = _probe_writable_directory(parent)
 	if not writable_error.is_empty():
 		return {"ok": false, "error": writable_error}
+	var destination_catalog: String = destination.path_join(CATALOG_FILE)
+	var destination_should_be_replaced: bool = false
 	if DirAccess.dir_exists_absolute(destination):
-		if not FileAccess.file_exists(destination_catalog):
-			return {"ok": false, "error": NotLightL10n.text("runtime.assets.asset_library_service.5cae9fedcf")}
-		var existing_validation: Dictionary = _validate_library_snapshot(destination)
-		if not bool(existing_validation.get("ok", false)):
-			return {"ok": false, "error": NotLightL10n.text("runtime.assets.asset_library_service.3b7d479ffc") % str(existing_validation.get("error", NotLightL10n.text("runtime.assets.asset_library_service.c248a6fec6")))}
-		var source_catalog_path: String = source_root.path_join(CATALOG_FILE)
-		if not _files_equal(source_catalog_path, destination_catalog):
-			return {"ok": false, "error": NotLightL10n.text("runtime.assets.asset_library_service.f2daccc3ec")}
-		var source_validation: Dictionary = _validate_library_snapshot(source_root)
-		if not bool(source_validation.get("ok", false)):
-			return {"ok": false, "error": NotLightL10n.text("runtime.assets.asset_library_service.ec46cb7ca9") % str(source_validation.get("error", NotLightL10n.text("runtime.assets.asset_library_service.c248a6fec6")))}
-		_prepared_external_root = destination
-		_prepared_external_catalog_sha256 = FileAccess.get_sha256(destination_catalog).to_lower()
-		return {"ok": true, "root": destination, "existing": true, "restart_required": true}
-	var staging: String = parent_abs.path_join(".notlight_library_staging")
+		if _directory_is_empty_absolute(destination):
+			destination_should_be_replaced = true
+		else:
+			if not FileAccess.file_exists(destination_catalog):
+				return {"ok": false, "error": NotLightL10n.text("settings.storage.existing_invalid") % destination}
+			var existing_validation: Dictionary = _validate_library_snapshot(destination)
+			if not bool(existing_validation.get("ok", false)):
+				return {"ok": false, "error": NotLightL10n.text("settings.storage.existing_invalid") % str(existing_validation.get("error", destination))}
+			var source_has_content: bool = _library_has_content(source_root)
+			var destination_has_content: bool = _library_has_content(destination)
+			if not source_has_content:
+				_prepared_external_root = destination
+				_prepared_external_catalog_sha256 = FileAccess.get_sha256(destination_catalog).to_lower()
+				_prepared_external_adopt_existing = true
+				return {"ok": true, "root": destination, "existing": true, "adopted": true, "restart_required": true}
+			# A destination previously initialized by NotLight can contain catalog.json
+			# plus empty blobs/cache/tmp directories. It is safe to replace only when
+			# its catalog has no user assets/folders. V2.3 treated that harmless shell
+			# as a conflicting populated library, which blocked real migrations.
+			if not destination_has_content:
+				destination_should_be_replaced = true
+			else:
+				var source_catalog_path: String = source_root.path_join(CATALOG_FILE)
+				if not _files_equal(source_catalog_path, destination_catalog):
+					return {"ok": false, "error": NotLightL10n.text("settings.storage.populated_conflict")}
+				_prepared_external_root = destination
+				_prepared_external_catalog_sha256 = FileAccess.get_sha256(destination_catalog).to_lower()
+				_prepared_external_adopt_existing = false
+				return {"ok": true, "root": destination, "existing": true, "restart_required": true}
+	if destination_should_be_replaced and DirAccess.dir_exists_absolute(destination):
+		if not _delete_directory_absolute(destination):
+			return {"ok": false, "error": NotLightL10n.text("settings.storage.prepare_failed")}
+	var token: String = AssetId.make_temporary_id("library-stage")
+	var staging: String = parent.path_join(".notlight_library_staging_%s" % token)
 	if DirAccess.dir_exists_absolute(staging):
 		_delete_directory_absolute(staging)
 	var make_error: Error = DirAccess.make_dir_recursive_absolute(staging)
 	if make_error != OK:
-		return {"ok": false, "error": NotLightL10n.text("runtime.assets.asset_library_service.89eef5b2de")}
+		return {"ok": false, "error": NotLightL10n.text("settings.storage.prepare_failed")}
 	var copy_result: Dictionary = _copy_directory_tree(source_root, staging)
 	if not bool(copy_result.get("ok", false)):
 		_delete_directory_absolute(staging)
 		return copy_result
-	if not FileAccess.file_exists(staging.path_join(CATALOG_FILE)):
-		_delete_directory_absolute(staging)
-		return {"ok": false, "error": NotLightL10n.text("runtime.assets.asset_library_service.1035e55f84")}
 	var snapshot_validation: Dictionary = _validate_library_snapshot(staging)
 	if not bool(snapshot_validation.get("ok", false)):
 		_delete_directory_absolute(staging)
-		return {"ok": false, "error": NotLightL10n.text("runtime.assets.asset_library_service.2861d38d1a") % str(snapshot_validation.get("error", NotLightL10n.text("runtime.assets.asset_library_service.c248a6fec6")))}
-	var rename_error: Error = DirAccess.rename_absolute(staging, destination)
-	if rename_error != OK:
+		return {"ok": false, "error": NotLightL10n.text("settings.storage.existing_invalid") % str(snapshot_validation.get("error", staging))}
+	if DirAccess.rename_absolute(staging, destination) != OK:
 		_delete_directory_absolute(staging)
-		return {"ok": false, "error": NotLightL10n.text("runtime.assets.asset_library_service.8701595bea")}
+		return {"ok": false, "error": NotLightL10n.text("settings.storage.prepare_failed")}
 	_prepared_external_root = destination
 	_prepared_external_catalog_sha256 = FileAccess.get_sha256(destination.path_join(CATALOG_FILE)).to_lower()
+	_prepared_external_adopt_existing = false
 	return {
 		"ok": true,
 		"root": destination,
@@ -563,66 +584,78 @@ func get_prepared_external_library_root() -> String:
 
 
 func finalize_prepared_external_library() -> Dictionary:
-	# The initial Settings copy is only a preparation snapshot. The active setting
-	# is intentionally not changed until a clean application exit. Re-copying here,
-	# after Notes/board state has been flushed, prevents edits made between choosing
-	# a disk and closing NotLight from disappearing after the restart.
 	if _prepared_external_root.is_empty():
 		return {"ok": true, "root": "", "changed": false}
 	var source_root: String = ProjectSettings.globalize_path(_root_dir).simplify_path()
 	var destination: String = _prepared_external_root.simplify_path()
 	if _storage_path_key(source_root) == _storage_path_key(destination):
 		return {"ok": true, "root": destination, "changed": false}
+	var destination_catalog: String = destination.path_join(CATALOG_FILE)
+	var validation: Dictionary = _validate_library_snapshot(destination)
+	if not bool(validation.get("ok", false)):
+		return {"ok": false, "error": NotLightL10n.text("settings.storage.existing_invalid") % str(validation.get("error", destination))}
+	var current_hash: String = FileAccess.get_sha256(destination_catalog).to_lower()
+	if not _prepared_external_catalog_sha256.is_empty() and current_hash != _prepared_external_catalog_sha256:
+		return {"ok": false, "error": NotLightL10n.text("settings.storage.destination_changed")}
+	if _prepared_external_adopt_existing:
+		return {"ok": true, "root": destination, "changed": true, "adopted": true}
 	var parent: String = destination.get_base_dir()
-	if not DirAccess.dir_exists_absolute(parent):
-		return {"ok": false, "error": NotLightL10n.text("runtime.assets.asset_library_service.76b3ad3c2b")}
 	var writable_error: String = _probe_writable_directory(parent)
 	if not writable_error.is_empty():
 		return {"ok": false, "error": writable_error}
-	var destination_catalog: String = destination.path_join(CATALOG_FILE)
-	if DirAccess.dir_exists_absolute(destination):
-		if not FileAccess.file_exists(destination_catalog):
-			return {"ok": false, "error": NotLightL10n.text("runtime.assets.asset_library_service.62233fd6bb")}
-		var current_prepared_hash: String = FileAccess.get_sha256(destination_catalog).to_lower()
-		if not _prepared_external_catalog_sha256.is_empty() and current_prepared_hash != _prepared_external_catalog_sha256:
-			return {"ok": false, "error": NotLightL10n.text("runtime.assets.asset_library_service.59420ecb04")}
 	var token: String = AssetId.make_temporary_id("library-finalize")
 	var staging: String = parent.path_join(".notlight_library_finalize_%s" % token)
 	var backup: String = parent.path_join(".notlight_library_previous_%s" % token)
-	if DirAccess.make_dir_recursive_absolute(staging) != OK:
-		return {"ok": false, "error": NotLightL10n.text("runtime.assets.asset_library_service.783d17af00")}
 	var copy_result: Dictionary = _copy_directory_tree(source_root, staging)
 	if not bool(copy_result.get("ok", false)):
 		_delete_directory_absolute(staging)
 		return copy_result
-	var validation: Dictionary = _validate_library_snapshot(staging)
+	validation = _validate_library_snapshot(staging)
 	if not bool(validation.get("ok", false)):
 		_delete_directory_absolute(staging)
-		return {"ok": false, "error": NotLightL10n.text("runtime.assets.asset_library_service.0a01500dd8") % str(validation.get("error", NotLightL10n.text("runtime.assets.asset_library_service.c248a6fec6")))}
+		return {"ok": false, "error": NotLightL10n.text("settings.storage.existing_invalid") % str(validation.get("error", staging))}
 	var had_destination: bool = DirAccess.dir_exists_absolute(destination)
 	if had_destination and DirAccess.rename_absolute(destination, backup) != OK:
 		_delete_directory_absolute(staging)
-		return {"ok": false, "error": NotLightL10n.text("runtime.assets.asset_library_service.dc381d7b4d")}
+		return {"ok": false, "error": NotLightL10n.text("settings.storage.prepare_failed")}
 	if DirAccess.rename_absolute(staging, destination) != OK:
 		if had_destination:
 			DirAccess.rename_absolute(backup, destination)
 		_delete_directory_absolute(staging)
-		return {"ok": false, "error": NotLightL10n.text("runtime.assets.asset_library_service.c9688453a8")}
-	var committed_validation: Dictionary = _validate_library_snapshot(destination)
-	if not bool(committed_validation.get("ok", false)):
+		return {"ok": false, "error": NotLightL10n.text("settings.storage.prepare_failed")}
+	validation = _validate_library_snapshot(destination)
+	if not bool(validation.get("ok", false)):
 		_delete_directory_absolute(destination)
 		if had_destination:
 			DirAccess.rename_absolute(backup, destination)
-		return {"ok": false, "error": NotLightL10n.text("runtime.assets.asset_library_service.30859f6ae1")}
+		return {"ok": false, "error": NotLightL10n.text("settings.storage.existing_invalid") % str(validation.get("error", destination))}
 	if had_destination:
 		_delete_directory_absolute(backup)
-	_prepared_external_catalog_sha256 = FileAccess.get_sha256(destination.path_join(CATALOG_FILE)).to_lower()
+	_prepared_external_catalog_sha256 = FileAccess.get_sha256(destination_catalog).to_lower()
 	return {"ok": true, "root": destination, "changed": true}
+
+
+func cleanup_migrated_external_library_source() -> Dictionary:
+	if _prepared_external_root.is_empty() or _prepared_external_adopt_existing:
+		return {"ok": true, "removed": false}
+	var source_root: String = ProjectSettings.globalize_path(_root_dir).simplify_path()
+	var destination: String = _prepared_external_root.simplify_path()
+	if _storage_path_key(source_root) == _storage_path_key(destination):
+		return {"ok": true, "removed": false}
+	if _path_is_inside(destination, source_root) or _path_is_inside(source_root, destination):
+		return {"ok": false, "error": NotLightL10n.text("settings.storage.overlap_error")}
+	var validation: Dictionary = _validate_library_snapshot(destination)
+	if not bool(validation.get("ok", false)):
+		return {"ok": false, "error": NotLightL10n.text("settings.storage.existing_invalid") % str(validation.get("error", destination))}
+	if DirAccess.dir_exists_absolute(source_root) and not _delete_directory_absolute(source_root):
+		return {"ok": false, "error": NotLightL10n.text("settings.storage.cleanup_failed") % source_root}
+	return {"ok": true, "removed": true, "source": source_root}
 
 
 func mark_prepared_external_library_activated() -> void:
 	_prepared_external_root = ""
 	_prepared_external_catalog_sha256 = ""
+	_prepared_external_adopt_existing = false
 
 
 func import_files(paths: PackedStringArray, folder_id: String = "") -> PackedStringArray:
@@ -1152,6 +1185,51 @@ func _cleanup_orphan_blobs() -> Dictionary:
 		else:
 			failures += 1
 	return {"removed": removed, "failures": failures, "bytes": bytes_freed}
+
+
+func _resolve_external_library_destination(selected_abs: String, source_root: String) -> String:
+	if _storage_path_key(selected_abs) == _storage_path_key(source_root):
+		return selected_abs
+	var leaf: String = selected_abs.get_file().to_lower()
+	if leaf == "library" or leaf == "notlightlibrary" or FileAccess.file_exists(selected_abs.path_join(CATALOG_FILE)):
+		return selected_abs
+	for relative: String in ["library", "NotLightLibrary", "notlight/library"]:
+		var candidate: String = selected_abs.path_join(relative).simplify_path()
+		if FileAccess.file_exists(candidate.path_join(CATALOG_FILE)):
+			return candidate
+	return selected_abs.path_join("NotLightLibrary").simplify_path()
+
+
+func _library_has_content(root: String) -> bool:
+	var catalog_path: String = root.path_join(CATALOG_FILE)
+	if not FileAccess.file_exists(catalog_path):
+		return false
+	var file: FileAccess = FileAccess.open(catalog_path, FileAccess.READ)
+	if file == null:
+		return true
+	var parsed: Variant = JSON.parse_string(file.get_as_text())
+	file.close()
+	if parsed is not Dictionary:
+		return true
+	var source: Dictionary = parsed as Dictionary
+	var assets_value: Variant = source.get("assets", [])
+	var folders_value: Variant = source.get("folders", [])
+	return (assets_value is Array and not (assets_value as Array).is_empty()) or (folders_value is Array and not (folders_value as Array).is_empty())
+
+
+func _directory_is_empty_absolute(path: String) -> bool:
+	var directory: DirAccess = DirAccess.open(path)
+	if directory == null:
+		return false
+	directory.list_dir_begin()
+	var entry: String = directory.get_next()
+	while not entry.is_empty():
+		if entry != "." and entry != "..":
+			directory.list_dir_end()
+			return false
+		entry = directory.get_next()
+	directory.list_dir_end()
+	return true
 
 
 func _validate_library_snapshot(root_path: String) -> Dictionary:

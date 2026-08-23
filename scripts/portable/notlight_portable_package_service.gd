@@ -1950,7 +1950,7 @@ func _validate_export_destination(destination_path: String) -> String:
 	var clean_destination: String = destination_path.strip_edges()
 	if clean_destination.is_empty():
 		return NotLightL10n.text("runtime.portable.notlight_portable_package_service.476490b47a")
-	var managed_roots: PackedStringArray = PackedStringArray([BoardRepository.ROOT_DIR, library.get_root_directory()])
+	var managed_roots: PackedStringArray = PackedStringArray([repository.get_root_directory(), library.get_root_directory()])
 	for managed_root: String in managed_roots:
 		if _path_is_within_or_equal(clean_destination, managed_root):
 			return NotLightL10n.text("runtime.portable.notlight_portable_package_service.d54ad7b1b1")

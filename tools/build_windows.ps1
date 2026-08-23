@@ -80,6 +80,38 @@ if (Test-Path -LiteralPath $godotCommand -PathType Leaf) {
     }
 }
 
+function Invoke-GodotChecked(
+    [string[]]$Arguments,
+    [string]$Label
+) {
+    $stdoutPath = Join-Path ([System.IO.Path]::GetTempPath()) ("notlight-godot-out-" + [Guid]::NewGuid().ToString("N") + ".log")
+    $stderrPath = Join-Path ([System.IO.Path]::GetTempPath()) ("notlight-godot-err-" + [Guid]::NewGuid().ToString("N") + ".log")
+    try {
+        $process = Start-Process -FilePath $godotCommand -ArgumentList $Arguments -NoNewWindow -Wait -PassThru -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath
+        $stdout = if (Test-Path -LiteralPath $stdoutPath) { Get-Content -LiteralPath $stdoutPath -Raw } else { "" }
+        $stderr = if (Test-Path -LiteralPath $stderrPath) { Get-Content -LiteralPath $stderrPath -Raw } else { "" }
+        if (-not [string]::IsNullOrWhiteSpace($stdout)) { Write-Host $stdout.TrimEnd() }
+        if (-not [string]::IsNullOrWhiteSpace($stderr)) { Write-Host $stderr.TrimEnd() }
+        $combined = $stdout + "`n" + $stderr
+        $fatalPattern = '(?im)(^|\s)(SCRIPT ERROR:|Parse Error:|Compile Error:|Failed to load script|Failed to compile dependent scripts)'
+        if ($process.ExitCode -ne 0 -or $combined -match $fatalPattern) {
+            throw "$Label failed. Godot exit code: $($process.ExitCode)."
+        }
+    } finally {
+        Remove-Item -LiteralPath $stdoutPath,$stderrPath -Force -ErrorAction SilentlyContinue
+    }
+}
+
+$storageRootsSmokeTest = Join-Path $root "tools\storage_roots_smoke_test.gd"
+if (-not (Test-Path -LiteralPath $storageRootsSmokeTest -PathType Leaf)) {
+    throw "Missing storage-roots migration smoke test: $storageRootsSmokeTest"
+}
+Write-Host ""
+Write-Host "Running storage-roots migration smoke test before Windows export..."
+Invoke-GodotChecked -Arguments @("--headless", "--editor", "--path", $root, "--quit-after", "2") -Label "Godot project refresh/parser pass"
+Invoke-GodotChecked -Arguments @("--headless", "--path", $root, "--script", "res://tools/storage_roots_smoke_test.gd") -Label "Storage-roots migration smoke test"
+Write-Host "Storage-roots migration smoke test passed."
+
 $godotArgs = @(
     "--headless",
     "--verbose",

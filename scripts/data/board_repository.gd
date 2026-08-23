@@ -18,16 +18,36 @@ const MANIFEST_SCHEMA_VERSION: int = 4
 
 var _last_error: String = ""
 var _rng: RandomNumberGenerator = RandomNumberGenerator.new()
+var _root_dir: String = ROOT_DIR
+var _boards_dir: String = BOARDS_DIR
+var _index_path: String = INDEX_PATH
+var _prepared_external_root: String = ""
+var _prepared_external_fingerprint: String = ""
+var _prepared_external_adopt_existing: bool = false
 
 
-func setup() -> bool:
+func setup(board_root: String = ROOT_DIR) -> bool:
 	_clear_error()
 	_rng.randomize()
-	if not _ensure_directory(ROOT_DIR):
+	_root_dir = board_root.strip_edges()
+	if _root_dir.is_empty():
+		_root_dir = ROOT_DIR
+	_boards_dir = _root_dir.path_join("boards")
+	_index_path = _root_dir.path_join("index.json")
+	var absolute_root: String = _absolute_path(_root_dir)
+	var default_key: String = _storage_path_key(_absolute_path(ROOT_DIR))
+	if _storage_path_key(absolute_root) != default_key and not DirAccess.dir_exists_absolute(absolute_root):
+		_fail(NotLightL10n.text("runtime.data.board_repository.external_root_missing") % absolute_root)
 		return false
-	if not _ensure_directory(BOARDS_DIR):
+	if not _ensure_directory(_root_dir):
+		return false
+	if not _ensure_directory(_boards_dir):
 		return false
 	return _rebuild_index_from_manifests()
+
+
+func get_root_directory() -> String:
+	return _root_dir
 
 
 func get_last_error() -> String:
@@ -339,6 +359,418 @@ func import_board_snapshot(metadata: Dictionary, document: Dictionary, stroke_pa
 	return imported_metadata.duplicate(true)
 
 
+
+func prepare_external_boards(selected_directory: String) -> Dictionary:
+	_clear_error()
+	var selected: String = selected_directory.strip_edges()
+	if selected.is_empty():
+		return {"ok": false, "error": NotLightL10n.text("settings.storage.prepare_boards_failed")}
+	var selected_abs: String = _absolute_path(selected).simplify_path()
+	if not DirAccess.dir_exists_absolute(selected_abs):
+		return {"ok": false, "error": NotLightL10n.text("settings.storage.folder_missing") % selected_abs}
+	var source_root: String = _absolute_path(_root_dir).simplify_path()
+	var destination: String = _resolve_external_board_destination(selected_abs, source_root)
+	if _storage_path_key(destination) == _storage_path_key(source_root):
+		_clear_prepared_external_boards()
+		return {"ok": true, "root": destination, "existing": true, "same_location": true, "restart_required": false}
+	if _path_is_inside(destination, source_root) or _path_is_inside(source_root, destination):
+		return {"ok": false, "error": NotLightL10n.text("settings.storage.overlap_error")}
+	var parent: String = destination.get_base_dir()
+	if not DirAccess.dir_exists_absolute(parent):
+		return {"ok": false, "error": NotLightL10n.text("settings.storage.folder_missing") % parent}
+	var writable_error: String = _probe_writable_directory(parent)
+	if not writable_error.is_empty():
+		return {"ok": false, "error": writable_error}
+
+	var destination_should_be_replaced: bool = false
+	if DirAccess.dir_exists_absolute(destination):
+		if _directory_is_empty_absolute(destination):
+			destination_should_be_replaced = true
+		else:
+			var validation: Dictionary = _validate_board_storage_snapshot(destination)
+			if not bool(validation.get("ok", false)):
+				return {"ok": false, "error": NotLightL10n.text("settings.storage.existing_invalid") % str(validation.get("error", ""))}
+			var source_has_content: bool = _board_storage_has_content(source_root)
+			var destination_has_content: bool = _board_storage_has_content(destination)
+			if not source_has_content:
+				_prepared_external_root = destination
+				_prepared_external_fingerprint = _board_storage_fingerprint(destination)
+				_prepared_external_adopt_existing = true
+				return {"ok": true, "root": destination, "existing": true, "adopted": true, "restart_required": true}
+			if not destination_has_content:
+				destination_should_be_replaced = true
+			elif _board_storage_fingerprint(source_root) != _board_storage_fingerprint(destination):
+				return {"ok": false, "error": NotLightL10n.text("settings.storage.populated_conflict")}
+			else:
+				_prepared_external_root = destination
+				_prepared_external_fingerprint = _board_storage_fingerprint(destination)
+				_prepared_external_adopt_existing = false
+				return {"ok": true, "root": destination, "existing": true, "restart_required": true}
+	if destination_should_be_replaced and DirAccess.dir_exists_absolute(destination):
+		if not _delete_directory_recursive(destination):
+			return {"ok": false, "error": NotLightL10n.text("settings.storage.prepare_boards_failed")}
+
+	var token: String = "%08x%08x" % [_rng.randi(), _rng.randi()]
+	var staging: String = parent.path_join(".notlight_boards_staging_%s" % token)
+	if DirAccess.dir_exists_absolute(staging):
+		_delete_directory_recursive(staging)
+	var copied: Dictionary = _copy_board_storage_snapshot(source_root, staging)
+	if not bool(copied.get("ok", false)):
+		_delete_directory_recursive(staging)
+		return copied
+	var validation: Dictionary = _validate_board_storage_snapshot(staging)
+	if not bool(validation.get("ok", false)):
+		_delete_directory_recursive(staging)
+		return {"ok": false, "error": NotLightL10n.text("settings.storage.existing_invalid") % str(validation.get("error", ""))}
+	if DirAccess.rename_absolute(staging, destination) != OK:
+		_delete_directory_recursive(staging)
+		return {"ok": false, "error": NotLightL10n.text("settings.storage.prepare_boards_failed")}
+	_prepared_external_root = destination
+	_prepared_external_fingerprint = _board_storage_fingerprint(destination)
+	_prepared_external_adopt_existing = false
+	return {
+		"ok": true,
+		"root": destination,
+		"existing": false,
+		"copied_files": int(copied.get("files", 0)),
+		"copied_bytes": int(copied.get("bytes", 0)),
+		"restart_required": true,
+	}
+
+
+func has_prepared_external_boards() -> bool:
+	return not _prepared_external_root.is_empty()
+
+
+func get_prepared_external_board_root() -> String:
+	return _prepared_external_root
+
+
+func finalize_prepared_external_boards() -> Dictionary:
+	if _prepared_external_root.is_empty():
+		return {"ok": true, "root": "", "changed": false}
+	var source_root: String = _absolute_path(_root_dir).simplify_path()
+	var destination: String = _prepared_external_root.simplify_path()
+	if _storage_path_key(source_root) == _storage_path_key(destination):
+		return {"ok": true, "root": destination, "changed": false}
+	var current_validation: Dictionary = _validate_board_storage_snapshot(destination)
+	if not bool(current_validation.get("ok", false)):
+		return {"ok": false, "error": NotLightL10n.text("settings.storage.existing_invalid") % str(current_validation.get("error", ""))}
+	var current_fingerprint: String = _board_storage_fingerprint(destination)
+	if not _prepared_external_fingerprint.is_empty() and current_fingerprint != _prepared_external_fingerprint:
+		return {"ok": false, "error": NotLightL10n.text("settings.storage.destination_changed")}
+	if _prepared_external_adopt_existing:
+		return {"ok": true, "root": destination, "changed": true, "adopted": true}
+
+	var parent: String = destination.get_base_dir()
+	var writable_error: String = _probe_writable_directory(parent)
+	if not writable_error.is_empty():
+		return {"ok": false, "error": writable_error}
+	var token: String = "%08x%08x" % [_rng.randi(), _rng.randi()]
+	var staging: String = parent.path_join(".notlight_boards_finalize_%s" % token)
+	var backup: String = parent.path_join(".notlight_boards_previous_%s" % token)
+	var copied: Dictionary = _copy_board_storage_snapshot(source_root, staging)
+	if not bool(copied.get("ok", false)):
+		_delete_directory_recursive(staging)
+		return copied
+	var validation: Dictionary = _validate_board_storage_snapshot(staging)
+	if not bool(validation.get("ok", false)):
+		_delete_directory_recursive(staging)
+		return {"ok": false, "error": NotLightL10n.text("settings.storage.existing_invalid") % str(validation.get("error", ""))}
+	var had_destination: bool = DirAccess.dir_exists_absolute(destination)
+	if had_destination and DirAccess.rename_absolute(destination, backup) != OK:
+		_delete_directory_recursive(staging)
+		return {"ok": false, "error": NotLightL10n.text("settings.storage.prepare_boards_failed")}
+	if DirAccess.rename_absolute(staging, destination) != OK:
+		if had_destination:
+			DirAccess.rename_absolute(backup, destination)
+		_delete_directory_recursive(staging)
+		return {"ok": false, "error": NotLightL10n.text("settings.storage.prepare_boards_failed")}
+	var committed: Dictionary = _validate_board_storage_snapshot(destination)
+	if not bool(committed.get("ok", false)):
+		_delete_directory_recursive(destination)
+		if had_destination:
+			DirAccess.rename_absolute(backup, destination)
+		return {"ok": false, "error": NotLightL10n.text("settings.storage.existing_invalid") % str(committed.get("error", ""))}
+	if had_destination:
+		_delete_directory_recursive(backup)
+	_prepared_external_fingerprint = _board_storage_fingerprint(destination)
+	return {"ok": true, "root": destination, "changed": true, "copied_files": int(copied.get("files", 0))}
+
+
+func cleanup_migrated_external_board_source() -> Dictionary:
+	if _prepared_external_root.is_empty() or _prepared_external_adopt_existing:
+		return {"ok": true, "removed": false}
+	var source_root: String = _absolute_path(_root_dir).simplify_path()
+	var destination: String = _prepared_external_root.simplify_path()
+	if _storage_path_key(source_root) == _storage_path_key(destination):
+		return {"ok": true, "removed": false}
+	if _path_is_inside(destination, source_root) or _path_is_inside(source_root, destination):
+		return {"ok": false, "error": NotLightL10n.text("settings.storage.overlap_error")}
+	var validation: Dictionary = _validate_board_storage_snapshot(destination)
+	if not bool(validation.get("ok", false)):
+		return {"ok": false, "error": NotLightL10n.text("settings.storage.existing_invalid") % str(validation.get("error", destination))}
+	# BoardRepository can use the historical .../notlight root, which may also
+	# contain sibling library/ and modules/ directories. Remove only files owned
+	# by board storage so migrating boards can never erase those siblings.
+	var source_boards: String = source_root.path_join("boards")
+	if DirAccess.dir_exists_absolute(source_boards) and not _delete_directory_recursive(source_boards):
+		return {"ok": false, "error": NotLightL10n.text("settings.storage.cleanup_failed") % source_boards}
+	for index_name: String in ["index.json", "index.json.bak", "index.json.tmp"]:
+		var source_index: String = source_root.path_join(index_name)
+		if FileAccess.file_exists(source_index) and DirAccess.remove_absolute(source_index) != OK:
+			return {"ok": false, "error": NotLightL10n.text("settings.storage.cleanup_failed") % source_index}
+	if DirAccess.dir_exists_absolute(source_root) and _directory_is_empty_absolute(source_root):
+		DirAccess.remove_absolute(source_root)
+	return {"ok": true, "removed": true, "source": source_root}
+
+
+func mark_prepared_external_boards_activated() -> void:
+	_clear_prepared_external_boards()
+
+
+func _clear_prepared_external_boards() -> void:
+	_prepared_external_root = ""
+	_prepared_external_fingerprint = ""
+	_prepared_external_adopt_existing = false
+
+
+func _resolve_external_board_destination(selected_abs: String, source_root: String) -> String:
+	if _storage_path_key(selected_abs) == _storage_path_key(source_root):
+		return selected_abs
+	if selected_abs.get_file().nocasecmp_to("boards") == 0:
+		var parent: String = selected_abs.get_base_dir()
+		if _looks_like_board_storage_root(parent):
+			return parent
+	if selected_abs.get_file().nocasecmp_to("NotLightBoards") == 0 or _looks_like_board_storage_root(selected_abs):
+		return selected_abs
+	for relative: String in ["notlight", "NotLightBoards"]:
+		var candidate: String = selected_abs.path_join(relative).simplify_path()
+		if DirAccess.dir_exists_absolute(candidate) and _looks_like_board_storage_root(candidate):
+			return candidate
+	return selected_abs.path_join("NotLightBoards").simplify_path()
+
+
+func _looks_like_board_storage_root(root: String) -> bool:
+	return DirAccess.dir_exists_absolute(root.path_join("boards")) or FileAccess.file_exists(root.path_join("index.json"))
+
+
+func _board_storage_has_content(root: String) -> bool:
+	var boards_path: String = root.path_join("boards")
+	if not DirAccess.dir_exists_absolute(boards_path):
+		return false
+	for entry: String in DirAccess.get_directories_at(boards_path):
+		if not _safe_id(entry).is_empty():
+			return true
+	return false
+
+
+func _copy_board_storage_snapshot(source_root: String, destination_root: String) -> Dictionary:
+	if DirAccess.dir_exists_absolute(destination_root):
+		_delete_directory_recursive(destination_root)
+	if DirAccess.make_dir_recursive_absolute(destination_root) != OK:
+		return {"ok": false, "error": NotLightL10n.text("settings.storage.prepare_boards_failed")}
+	var files_copied: int = 0
+	var bytes_copied: int = 0
+	var source_boards: String = source_root.path_join("boards")
+	var destination_boards: String = destination_root.path_join("boards")
+	if DirAccess.dir_exists_absolute(source_boards):
+		var tree_result: Dictionary = _copy_directory_tree_verified_absolute(source_boards, destination_boards, 0)
+		if not bool(tree_result.get("ok", false)):
+			return tree_result
+		files_copied += int(tree_result.get("files", 0))
+		bytes_copied += int(tree_result.get("bytes", 0))
+	else:
+		DirAccess.make_dir_recursive_absolute(destination_boards)
+	for index_name: String in ["index.json", "index.json.bak"]:
+		var source_index: String = source_root.path_join(index_name)
+		if FileAccess.file_exists(source_index):
+			var target_index: String = destination_root.path_join(index_name)
+			if DirAccess.copy_absolute(source_index, target_index) != OK:
+				return {"ok": false, "error": NotLightL10n.text("settings.storage.prepare_boards_failed")}
+			if FileAccess.get_sha256(source_index).to_lower() != FileAccess.get_sha256(target_index).to_lower():
+				return {"ok": false, "error": NotLightL10n.text("settings.storage.verify_failed") % index_name}
+			files_copied += 1
+			bytes_copied += _file_size_absolute(source_index)
+	return {"ok": true, "files": files_copied, "bytes": bytes_copied}
+
+
+func _validate_board_storage_snapshot(root: String) -> Dictionary:
+	var boards_path: String = root.path_join("boards")
+	if not DirAccess.dir_exists_absolute(boards_path):
+		return {"ok": false, "error": NotLightL10n.text("settings.storage.boards_folder_missing")}
+	for entry: String in DirAccess.get_directories_at(boards_path):
+		var safe_id: String = _safe_id(entry)
+		if safe_id.is_empty():
+			continue
+		var board_dir: String = boards_path.path_join(safe_id)
+		var manifest: Dictionary = _read_json_absolute(board_dir.path_join(MANIFEST_FILE))
+		var document: Dictionary = _read_json_absolute(board_dir.path_join(BOARD_FILE))
+		if manifest.is_empty() or document.is_empty() or not BoardDocumentSchema.is_supported(document):
+			return {"ok": false, "error": NotLightL10n.text("settings.storage.board_invalid") % safe_id}
+		var storage: Dictionary = document.get("storage", {}) as Dictionary
+		var stroke_payload: String = str(storage.get("stroke_payload", "")).strip_edges()
+		if not stroke_payload.is_empty() and not FileAccess.file_exists(board_dir.path_join(stroke_payload)):
+			return {"ok": false, "error": NotLightL10n.text("settings.storage.board_invalid") % safe_id}
+	return {"ok": true}
+
+
+func _read_json_absolute(path: String) -> Dictionary:
+	var file: FileAccess = FileAccess.open(path, FileAccess.READ)
+	if file == null:
+		return {}
+	var parsed: Variant = JSON.parse_string(file.get_as_text())
+	file.close()
+	return (parsed as Dictionary) if parsed is Dictionary else {}
+
+
+func _board_storage_fingerprint(root: String) -> String:
+	var context: HashingContext = HashingContext.new()
+	if context.start(HashingContext.HASH_SHA256) != OK:
+		return ""
+	for name: String in ["index.json", "index.json.bak"]:
+		var path: String = root.path_join(name)
+		var digest: String = FileAccess.get_sha256(path).to_lower() if FileAccess.file_exists(path) else "-"
+		if context.update(("f|%s|%s\n" % [name, digest]).to_utf8_buffer()) != OK:
+			return ""
+	var boards_digest: String = _directory_tree_fingerprint_absolute(root.path_join("boards"), 0)
+	if boards_digest.is_empty():
+		boards_digest = "-"
+	if context.update(("d|boards|%s\n" % boards_digest).to_utf8_buffer()) != OK:
+		return ""
+	return context.finish().hex_encode()
+
+
+func _directory_tree_fingerprint_absolute(root: String, depth: int) -> String:
+	if depth > 64:
+		return ""
+	var directory: DirAccess = DirAccess.open(root)
+	if directory == null:
+		return ""
+	var entries: PackedStringArray = PackedStringArray()
+	directory.list_dir_begin()
+	var entry: String = directory.get_next()
+	while not entry.is_empty():
+		if entry != "." and entry != "..":
+			entries.append(entry)
+		entry = directory.get_next()
+	directory.list_dir_end()
+	entries.sort()
+	var context: HashingContext = HashingContext.new()
+	if context.start(HashingContext.HASH_SHA256) != OK:
+		return ""
+	for child_name: String in entries:
+		if directory.is_link(child_name):
+			return ""
+		var child_path: String = root.path_join(child_name)
+		var is_directory: bool = DirAccess.dir_exists_absolute(child_path)
+		var digest: String = _directory_tree_fingerprint_absolute(child_path, depth + 1) if is_directory else FileAccess.get_sha256(child_path).to_lower()
+		if digest.length() != 64:
+			return ""
+		if context.update(("%s|%s|%s\n" % ["d" if is_directory else "f", child_name, digest]).to_utf8_buffer()) != OK:
+			return ""
+	return context.finish().hex_encode()
+
+
+func _copy_directory_tree_verified_absolute(source: String, destination: String, depth: int) -> Dictionary:
+	if depth > 64:
+		return {"ok": false, "error": NotLightL10n.text("settings.storage.prepare_boards_failed")}
+	var directory: DirAccess = DirAccess.open(source)
+	if directory == null:
+		return {"ok": false, "error": NotLightL10n.text("settings.storage.prepare_boards_failed")}
+	if DirAccess.make_dir_recursive_absolute(destination) != OK:
+		return {"ok": false, "error": NotLightL10n.text("settings.storage.prepare_boards_failed")}
+	var files_copied: int = 0
+	var bytes_copied: int = 0
+	directory.list_dir_begin()
+	var entry: String = directory.get_next()
+	while not entry.is_empty():
+		if entry != "." and entry != "..":
+			if directory.is_link(entry):
+				directory.list_dir_end()
+				return {"ok": false, "error": NotLightL10n.text("settings.storage.prepare_boards_failed")}
+			var src: String = source.path_join(entry)
+			var dst: String = destination.path_join(entry)
+			if directory.current_is_dir():
+				var nested: Dictionary = _copy_directory_tree_verified_absolute(src, dst, depth + 1)
+				if not bool(nested.get("ok", false)):
+					directory.list_dir_end()
+					return nested
+				files_copied += int(nested.get("files", 0))
+				bytes_copied += int(nested.get("bytes", 0))
+			else:
+				if DirAccess.copy_absolute(src, dst) != OK:
+					directory.list_dir_end()
+					return {"ok": false, "error": NotLightL10n.text("settings.storage.prepare_boards_failed")}
+				if FileAccess.get_sha256(src).to_lower() != FileAccess.get_sha256(dst).to_lower():
+					directory.list_dir_end()
+					return {"ok": false, "error": NotLightL10n.text("settings.storage.verify_failed") % entry}
+				files_copied += 1
+				bytes_copied += _file_size_absolute(src)
+		entry = directory.get_next()
+	directory.list_dir_end()
+	return {"ok": true, "files": files_copied, "bytes": bytes_copied}
+
+
+func _file_size_absolute(path: String) -> int:
+	var file: FileAccess = FileAccess.open(path, FileAccess.READ)
+	if file == null:
+		return 0
+	var length: int = file.get_length()
+	file.close()
+	return length
+
+
+func _directory_is_empty_absolute(path: String) -> bool:
+	var directory: DirAccess = DirAccess.open(path)
+	if directory == null:
+		return false
+	directory.list_dir_begin()
+	var entry: String = directory.get_next()
+	while not entry.is_empty():
+		if entry != "." and entry != "..":
+			directory.list_dir_end()
+			return false
+		entry = directory.get_next()
+	directory.list_dir_end()
+	return true
+
+
+func _probe_writable_directory(path: String) -> String:
+	var probe_path: String = path.path_join(".notlight_board_write_probe_%08x.tmp" % _rng.randi())
+	var probe: FileAccess = FileAccess.open(probe_path, FileAccess.WRITE)
+	if probe == null:
+		return NotLightL10n.text("settings.storage.not_writable") % path
+	var payload: PackedByteArray = "NotLight board storage write probe".to_utf8_buffer()
+	var stored: bool = probe.store_buffer(payload)
+	probe.flush()
+	var write_error: Error = probe.get_error()
+	probe.close()
+	if not stored or write_error != OK:
+		DirAccess.remove_absolute(probe_path)
+		return NotLightL10n.text("settings.storage.not_writable") % path
+	var readback: PackedByteArray = FileAccess.get_file_as_bytes(probe_path)
+	DirAccess.remove_absolute(probe_path)
+	return "" if readback == payload else NotLightL10n.text("settings.storage.not_writable") % path
+
+
+func _path_is_inside(candidate: String, parent: String) -> bool:
+	var clean_candidate: String = _storage_path_key(candidate)
+	var clean_parent: String = _storage_path_key(parent)
+	if clean_candidate.is_empty() or clean_parent.is_empty():
+		return false
+	return clean_candidate == clean_parent or clean_candidate.begins_with(clean_parent + "/")
+
+
+func _storage_path_key(path: String) -> String:
+	var clean: String = path.simplify_path().replace("\\", "/").trim_suffix("/")
+	return clean.to_lower() if OS.get_name() == "Windows" else clean
+
+
+func _absolute_path(path: String) -> String:
+	return ProjectSettings.globalize_path(path) if path.begins_with("user://") or path.begins_with("res://") else path
+
+
 func _make_metadata(
 	board_id: String,
 	board_name: String,
@@ -497,10 +929,10 @@ func _remove_index_metadata(board_id: String) -> bool:
 
 
 func _read_supported_index() -> Dictionary:
-	var primary: Dictionary = _read_json(INDEX_PATH, false)
+	var primary: Dictionary = _read_json(_index_path, false)
 	if _index_is_supported(primary):
 		return primary
-	var backup: Dictionary = _read_json("%s.bak" % INDEX_PATH, false)
+	var backup: Dictionary = _read_json("%s.bak" % _index_path, false)
 	if _index_is_supported(backup):
 		return backup
 	return {}
@@ -523,11 +955,11 @@ func _write_index_records(boards: Array[Dictionary]) -> bool:
 		"schema_version": INDEX_SCHEMA_VERSION,
 		"boards": boards,
 	}
-	return _write_json_atomic(INDEX_PATH, index)
+	return _write_json_atomic(_index_path, index)
 
 
 func _rebuild_index_from_manifests() -> bool:
-	if not _ensure_directory(BOARDS_DIR):
+	if not _ensure_directory(_boards_dir):
 		return false
 	var previous_index: Dictionary = _read_supported_index()
 	var previous_by_id: Dictionary = {}
@@ -543,7 +975,7 @@ func _rebuild_index_from_manifests() -> bool:
 
 	var boards: Array[Dictionary] = []
 	var discovered: Dictionary = {}
-	var directories: PackedStringArray = DirAccess.get_directories_at(BOARDS_DIR)
+	var directories: PackedStringArray = DirAccess.get_directories_at(_boards_dir)
 	for entry: String in directories:
 		var board_id: String = _safe_id(entry)
 		if board_id.is_empty():
@@ -845,7 +1277,7 @@ func _safe_id(value: String) -> String:
 
 
 func _board_dir(board_id: String) -> String:
-	return BOARDS_DIR.path_join(board_id)
+	return _boards_dir.path_join(board_id)
 
 
 func _manifest_path(board_id: String) -> String:
