@@ -34,7 +34,13 @@ func available_locales() -> Array[String]:
 
 func locale_label(locale: String) -> String:
 	var normalized: String = _normalize_locale(locale)
-	return text("locale.name.%s" % normalized)
+	if not SUPPORTED_LOCALES.has(normalized):
+		normalized = DEFAULT_LOCALE
+	var key: String = "locale.name.%s" % normalized
+	var label: String = _lookup_core(key, normalized)
+	if label.is_empty():
+		label = _lookup_core(key, DEFAULT_LOCALE)
+	return label if not label.is_empty() else normalized
 
 
 func set_locale(locale: String) -> bool:

@@ -61,13 +61,66 @@ func _test_boards(base_abs: String) -> void:
 		else:
 			_assert_path(str(finalized.get("root", "")), expected, "board finalized target")
 			_assert_board_file(expected, board_id, "board target after finalize")
-			var cleanup_value: Variant = repository.call("cleanup_migrated_external_board_source")
-			var cleanup: Dictionary = cleanup_value as Dictionary if cleanup_value is Dictionary else {}
-			if not bool(cleanup.get("ok", false)):
-				_fail("board source cleanup failed: %s" % str(cleanup.get("error", "")))
+			var proof: String = str(finalized.get("proof", ""))
+			if proof.length() != 64:
+				_fail("board finalize did not return a durable cleanup proof")
+			repository.call("mark_prepared_external_boards_activated")
+			# Simulate the post-crash retry path: cleanup must not depend on the
+			# in-memory prepared migration state that was just cleared.
+			var cleanup_repository: Node = BoardRepositoryScript.new()
+			root.add_child(cleanup_repository)
+			if not bool(cleanup_repository.call("cleanup_migrated_board_source", source, expected, proof)):
+				_fail("board source cleanup rejected a verified persisted migration")
+			cleanup_repository.queue_free()
 			if DirAccess.dir_exists_absolute(source.path_join("boards")):
 				_fail("board migration left the old boards directory behind")
-		repository.call("mark_prepared_external_boards_activated")
+
+	# Regression: a board repository with zero boards must move into a brand-new
+	# parent, finalize, return a durable proof, and clean up its old board-owned
+	# storage without requiring any board package to exist.
+	var no_board_source: String = base_abs.path_join("board-zero-content-source")
+	DirAccess.make_dir_recursive_absolute(no_board_source)
+	var no_board_repository: Node = BoardRepositoryScript.new()
+	root.add_child(no_board_repository)
+	if bool(no_board_repository.call("setup", no_board_source)):
+		var no_board_parent: String = base_abs.path_join("board-zero-content-parent")
+		DirAccess.make_dir_recursive_absolute(no_board_parent)
+		var no_board_prepare_value: Variant = no_board_repository.call("prepare_external_boards", no_board_parent)
+		var no_board_prepare: Dictionary = no_board_prepare_value as Dictionary if no_board_prepare_value is Dictionary else {}
+		var no_board_target: String = no_board_parent.path_join("NotLightBoards").simplify_path()
+		if not bool(no_board_prepare.get("ok", false)):
+			_fail("zero-board repository prepare failed: %s" % str(no_board_prepare.get("error", "")))
+		else:
+			var no_board_finalize_value: Variant = no_board_repository.call("finalize_prepared_external_boards")
+			var no_board_finalize: Dictionary = no_board_finalize_value as Dictionary if no_board_finalize_value is Dictionary else {}
+			if not bool(no_board_finalize.get("ok", false)):
+				_fail("zero-board repository finalize failed: %s" % str(no_board_finalize.get("error", "")))
+			else:
+				var no_board_proof: String = str(no_board_finalize.get("proof", ""))
+				if no_board_proof.length() != 64:
+					_fail("zero-board repository finalize did not return a durable cleanup proof")
+				no_board_repository.call("mark_prepared_external_boards_activated")
+				var no_board_cleanup: Node = BoardRepositoryScript.new()
+				root.add_child(no_board_cleanup)
+				if not bool(no_board_cleanup.call("cleanup_migrated_board_source", no_board_source, no_board_target, no_board_proof)):
+					_fail("zero-board repository source cleanup rejected a verified migration")
+				no_board_cleanup.queue_free()
+				if DirAccess.dir_exists_absolute(no_board_source.path_join("boards")):
+					_fail("zero-board repository left the old boards directory behind")
+				if not DirAccess.dir_exists_absolute(no_board_target.path_join("boards")):
+					_fail("zero-board repository migrated target is missing its boards directory")
+				var no_board_reopen: Node = BoardRepositoryScript.new()
+				root.add_child(no_board_reopen)
+				if not bool(no_board_reopen.call("setup", no_board_target)):
+					_fail("zero-board repository migrated target did not reopen")
+				else:
+					var no_boards_value: Variant = no_board_reopen.call("list_boards")
+					if no_boards_value is Array and not (no_boards_value as Array).is_empty():
+						_fail("zero-board repository gained boards during migration")
+				no_board_reopen.queue_free()
+	else:
+		_fail("zero-board repository setup failed")
+	no_board_repository.queue_free()
 
 	# Historical board root can contain sibling resource/module stores. Migrating
 	# boards must delete only board-owned paths, never those siblings.
@@ -110,10 +163,13 @@ func _test_boards(base_abs: String) -> void:
 			if not bool(move_finalize.get("ok", false)):
 				_fail("legacy board move finalize failed: %s" % str(move_finalize.get("error", "")))
 			else:
-				var move_cleanup_value: Variant = legacy_active.call("cleanup_migrated_external_board_source")
-				var move_cleanup: Dictionary = move_cleanup_value as Dictionary if move_cleanup_value is Dictionary else {}
-				if not bool(move_cleanup.get("ok", false)):
-					_fail("legacy board source cleanup failed: %s" % str(move_cleanup.get("error", "")))
+				var move_proof: String = str(move_finalize.get("proof", ""))
+				legacy_active.call("mark_prepared_external_boards_activated")
+				var retry_repository: Node = BoardRepositoryScript.new()
+				root.add_child(retry_repository)
+				if not bool(retry_repository.call("cleanup_migrated_board_source", legacy_root, empty_target, move_proof)):
+					_fail("legacy board source cleanup failed after prepared state was cleared")
+				retry_repository.queue_free()
 				_assert_board_file(empty_target, board_id, "board initialized-empty target")
 				if not FileAccess.file_exists(sibling_marker):
 					_fail("board migration deleted sibling legacy library data")
@@ -132,6 +188,49 @@ func _test_resource_library(base_abs: String) -> void:
 		_fail("library test board repository setup failed")
 		repository.queue_free()
 		return
+
+	# Regression: a Resource Library with zero user resources must move into a
+	# brand-new parent, finalize, reopen empty, and remove its old app-owned store.
+	var no_resource_source: String = base_abs.path_join("resource-zero-content-source")
+	var no_resource_library: Node = AssetLibraryServiceScript.new()
+	root.add_child(no_resource_library)
+	if bool(no_resource_library.call("setup", repository, no_resource_source)):
+		var no_resource_parent: String = base_abs.path_join("resource-zero-content-parent")
+		DirAccess.make_dir_recursive_absolute(no_resource_parent)
+		var no_resource_prepare_value: Variant = no_resource_library.call("prepare_external_library", no_resource_parent)
+		var no_resource_prepare: Dictionary = no_resource_prepare_value as Dictionary if no_resource_prepare_value is Dictionary else {}
+		var no_resource_target: String = no_resource_parent.path_join("NotLightLibrary").simplify_path()
+		if not bool(no_resource_prepare.get("ok", false)):
+			_fail("zero-resource library prepare failed: %s" % str(no_resource_prepare.get("error", "")))
+		else:
+			var no_resource_finalize_value: Variant = no_resource_library.call("finalize_prepared_external_library")
+			var no_resource_finalize: Dictionary = no_resource_finalize_value as Dictionary if no_resource_finalize_value is Dictionary else {}
+			if not bool(no_resource_finalize.get("ok", false)):
+				_fail("zero-resource library finalize failed: %s" % str(no_resource_finalize.get("error", "")))
+			else:
+				var no_resource_proof: String = str(no_resource_finalize.get("proof", ""))
+				if no_resource_proof.length() != 64:
+					_fail("zero-resource library finalize did not return a durable cleanup proof")
+				no_resource_library.call("mark_prepared_external_library_activated")
+				var no_resource_cleanup: Node = AssetLibraryServiceScript.new()
+				root.add_child(no_resource_cleanup)
+				if not bool(no_resource_cleanup.call("cleanup_migrated_library_source", no_resource_source, no_resource_target, no_resource_proof)):
+					_fail("zero-resource library source cleanup rejected a verified migration")
+				no_resource_cleanup.queue_free()
+				if DirAccess.dir_exists_absolute(no_resource_source):
+					_fail("zero-resource library left the old source directory behind")
+				var no_resource_reopen: Node = AssetLibraryServiceScript.new()
+				root.add_child(no_resource_reopen)
+				if not bool(no_resource_reopen.call("setup", repository, no_resource_target)):
+					_fail("zero-resource library migrated target did not reopen")
+				else:
+					var no_resources_value: Variant = no_resource_reopen.call("list_assets")
+					if no_resources_value is Array and not (no_resources_value as Array).is_empty():
+						_fail("zero-resource library gained resources during migration")
+				no_resource_reopen.queue_free()
+	else:
+		_fail("zero-resource library setup failed")
+	no_resource_library.queue_free()
 
 	var source: String = base_abs.path_join("resource-source")
 	var library: Node = AssetLibraryServiceScript.new()
@@ -163,13 +262,17 @@ func _test_resource_library(base_abs: String) -> void:
 			_fail("resource finalize failed: %s" % str(finalized.get("error", "")))
 		else:
 			_assert_seeded_resource_files(expected, seeded, "resource target after finalize")
-			var cleanup_value: Variant = library.call("cleanup_migrated_external_library_source")
-			var cleanup: Dictionary = cleanup_value as Dictionary if cleanup_value is Dictionary else {}
-			if not bool(cleanup.get("ok", false)):
-				_fail("resource source cleanup failed: %s" % str(cleanup.get("error", "")))
+			var proof: String = str(finalized.get("proof", ""))
+			if proof.length() != 64:
+				_fail("resource finalize did not return a durable cleanup proof")
+			library.call("mark_prepared_external_library_activated")
+			var cleanup_library: Node = AssetLibraryServiceScript.new()
+			root.add_child(cleanup_library)
+			if not bool(cleanup_library.call("cleanup_migrated_library_source", source, expected, proof)):
+				_fail("resource source cleanup rejected a verified persisted migration")
+			cleanup_library.queue_free()
 			if DirAccess.dir_exists_absolute(source):
 				_fail("resource migration left the old source library behind")
-		library.call("mark_prepared_external_library_activated")
 	_assert_resource_reopens(repository, expected, seeded, "resource migrated target reopen")
 
 	# Exact reproduction of the reported user sequence:
@@ -226,13 +329,15 @@ func _test_resource_library(base_abs: String) -> void:
 			if not bool(move_finalize.get("ok", false)):
 				_fail("legacy Resource Library finalize failed: %s" % str(move_finalize.get("error", "")))
 			else:
-				var move_cleanup_value: Variant = legacy_active.call("cleanup_migrated_external_library_source")
-				var move_cleanup: Dictionary = move_cleanup_value as Dictionary if move_cleanup_value is Dictionary else {}
-				if not bool(move_cleanup.get("ok", false)):
-					_fail("legacy Resource Library cleanup failed: %s" % str(move_cleanup.get("error", "")))
+				var move_proof: String = str(move_finalize.get("proof", ""))
+				legacy_active.call("mark_prepared_external_library_activated")
+				var retry_library: Node = AssetLibraryServiceScript.new()
+				root.add_child(retry_library)
+				if not bool(retry_library.call("cleanup_migrated_library_source", legacy_library, empty_initialized_target, move_proof)):
+					_fail("legacy Resource Library cleanup failed after prepared state was cleared")
+				retry_library.queue_free()
 				if DirAccess.dir_exists_absolute(legacy_library):
 					_fail("legacy Resource Library still exists after a successful move")
-			legacy_active.call("mark_prepared_external_library_activated")
 	legacy_active.queue_free()
 	_assert_resource_reopens(repository, empty_initialized_target, seeded, "legacy Resource Library moved target reopen")
 	library.queue_free()
@@ -258,7 +363,8 @@ func _test_module_library(base_abs: String) -> void:
 		registry.queue_free()
 		repository.queue_free()
 		return
-	var sample_module: String = source.path_join("storage-smoke-module")
+	var sample_module_id: String = "notlight.storage-smoke-module"
+	var sample_module: String = source.path_join(sample_module_id)
 	DirAccess.make_dir_recursive_absolute(sample_module)
 	_write_text_file(sample_module.path_join("state.json"), "{}")
 
@@ -275,15 +381,58 @@ func _test_module_library(base_abs: String) -> void:
 		if not bool(finalized.get("ok", false)):
 			_fail("module finalize failed: %s" % str(finalized.get("error", "")))
 		else:
-			var cleanup_value: Variant = registry.call("cleanup_migrated_external_modules_source")
-			var cleanup: Dictionary = cleanup_value as Dictionary if cleanup_value is Dictionary else {}
-			if not bool(cleanup.get("ok", false)):
-				_fail("module source cleanup failed: %s" % str(cleanup.get("error", "")))
+			var proof: String = str(finalized.get("proof", ""))
+			if proof.length() != 64:
+				_fail("module finalize did not return a durable cleanup proof")
+			registry.call("mark_prepared_external_modules_activated")
+			var cleanup_registry: Node = ModuleRegistryScript.new()
+			root.add_child(cleanup_registry)
+			if not bool(cleanup_registry.call("cleanup_migrated_module_source", source, expected, proof)):
+				_fail("module source cleanup rejected a verified persisted migration")
+			cleanup_registry.queue_free()
 			if DirAccess.dir_exists_absolute(source):
 				_fail("module migration left the old source library behind")
-		registry.call("mark_prepared_external_modules_activated")
-	if not FileAccess.file_exists(expected.path_join("storage-smoke-module").path_join("state.json")):
+	if not FileAccess.file_exists(expected.path_join(sample_module_id).path_join("state.json")):
 		_fail("module marker missing after migration")
+
+	# Regression: a completely empty Module Library must still finalize into a
+	# fresh parent. The finalizer has to create its staging root explicitly because
+	# there are zero copyable entries that could create it implicitly.
+	var empty_finalize_source: String = base_abs.path_join("module-empty-finalize-source")
+	DirAccess.make_dir_recursive_absolute(empty_finalize_source)
+	var empty_finalize_registry: Node = ModuleRegistryScript.new()
+	root.add_child(empty_finalize_registry)
+	empty_finalize_registry.call("configure", repository, empty_finalize_source)
+	if bool(empty_finalize_registry.call("setup")):
+		var empty_finalize_parent: String = base_abs.path_join("module-empty-finalize-parent")
+		DirAccess.make_dir_recursive_absolute(empty_finalize_parent)
+		var empty_prepare_value: Variant = empty_finalize_registry.call("prepare_external_modules", empty_finalize_parent)
+		var empty_prepare: Dictionary = empty_prepare_value as Dictionary if empty_prepare_value is Dictionary else {}
+		var empty_target: String = empty_finalize_parent.path_join("NotLightModules").simplify_path()
+		if not bool(empty_prepare.get("ok", false)):
+			_fail("empty Module Library prepare failed: %s" % str(empty_prepare.get("error", "")))
+		else:
+			var empty_finalize_value: Variant = empty_finalize_registry.call("finalize_prepared_external_modules")
+			var empty_finalize: Dictionary = empty_finalize_value as Dictionary if empty_finalize_value is Dictionary else {}
+			if not bool(empty_finalize.get("ok", false)):
+				_fail("empty Module Library finalize failed: %s" % str(empty_finalize.get("error", "")))
+			else:
+				var empty_proof: String = str(empty_finalize.get("proof", ""))
+				if empty_proof.length() != 64:
+					_fail("empty Module Library finalize did not return a durable cleanup proof")
+				empty_finalize_registry.call("mark_prepared_external_modules_activated")
+				var empty_cleanup_registry: Node = ModuleRegistryScript.new()
+				root.add_child(empty_cleanup_registry)
+				if not bool(empty_cleanup_registry.call("cleanup_migrated_module_source", empty_finalize_source, empty_target, empty_proof)):
+					_fail("empty Module Library source cleanup rejected a verified migration")
+				empty_cleanup_registry.queue_free()
+				if DirAccess.dir_exists_absolute(empty_finalize_source):
+					_fail("empty Module Library source still exists after a successful move")
+				if not DirAccess.dir_exists_absolute(empty_target):
+					_fail("empty Module Library migrated target is missing after finalize")
+	else:
+		_fail("empty Module Library registry setup failed")
+	empty_finalize_registry.queue_free()
 
 	var legacy_parent: String = base_abs.path_join("NotLight Board").path_join("notlight")
 	var legacy_modules: String = legacy_parent.path_join("modules")
@@ -320,13 +469,16 @@ func _test_module_library(base_abs: String) -> void:
 			if not bool(move_finalize.get("ok", false)):
 				_fail("legacy module move finalize failed: %s" % str(move_finalize.get("error", "")))
 			else:
-				var move_cleanup_value: Variant = legacy_active.call("cleanup_migrated_external_modules_source")
-				var move_cleanup: Dictionary = move_cleanup_value as Dictionary if move_cleanup_value is Dictionary else {}
-				if not bool(move_cleanup.get("ok", false)):
-					_fail("legacy module cleanup failed: %s" % str(move_cleanup.get("error", "")))
+				var move_proof: String = str(move_finalize.get("proof", ""))
+				legacy_active.call("mark_prepared_external_modules_activated")
+				var retry_registry: Node = ModuleRegistryScript.new()
+				root.add_child(retry_registry)
+				if not bool(retry_registry.call("cleanup_migrated_module_source", legacy_modules, target_shell, move_proof)):
+					_fail("legacy module cleanup failed after prepared state was cleared")
+				retry_registry.queue_free()
 				if DirAccess.dir_exists_absolute(legacy_modules):
 					_fail("legacy module source still exists after a successful move")
-				if not FileAccess.file_exists(target_shell.path_join("storage-smoke-module").path_join("state.json")):
+				if not FileAccess.file_exists(target_shell.path_join(sample_module_id).path_join("state.json")):
 					_fail("module marker missing in initialized-empty move target")
 	else:
 		_fail("could not reopen legacy module library")

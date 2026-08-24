@@ -224,8 +224,8 @@
 		"common.show_more_remaining": "Паказаць яшчэ · засталося {count}",
 		"common.unavailable": "Недаступна",
 		"common.yes": "так",
-		"credits.body": "NotLight выкарыстоўвае шмат адкрытых праектаў і інструментаў, створаных іншымі людзьмі. Дзякуй іх аўтарам і ўсім, хто працягвае іх развіваць і падтрымліваць.\n\nНіжэй пералічаны асноўныя праекты, якія выкарыстоўваюцца ў NotLight:\n\n• Godot Engine\n• FFmpeg\n• Poppler\n• Typst\n• qpdf\n• MiTeX\n\nПоўныя тэксты ліцэнзій, звесткі пра аўтараў і іншыя неабходныя паведамленні знаходзяцца побач з дыстрыбутывам у [b]THIRD_PARTY_LICENSES[/b] і [b]THIRD_PARTY_NOTICES.md[/b].",
-		"credits.license_note": "Ліцэнзіі старонніх кампанентаў і юрыдычныя паведамленні захоўваюцца ў THIRD_PARTY_LICENSES і THIRD_PARTY_NOTICES.md.",
+		"credits.body": "NotLight выкарыстоўвае шмат адкрытых праектаў і інструментаў, створаных іншымі людзьмі. Дзякуй іх аўтарам і ўсім, хто працягвае іх развіваць і падтрымліваць.\n\nНіжэй пералічаны асноўныя праекты, якія выкарыстоўваюцца ў NotLight:\n\n• Godot Engine\n• FFmpeg\n• Poppler\n• Typst\n• qpdf\n• MiTeX\n\nПоўныя тэксты ліцэнзій знаходзяцца ў папцы [b]THIRD_PARTY_LICENSES/[/b], спіс старонніх кампанентаў — у [b]THIRD_PARTY_COMPONENTS.json[/b], а звесткі пра аўтараў і абавязковыя паведамленні — у [b]THIRD_PARTY_NOTICES.md[/b] побач з праграмай.",
+		"credits.license_note": "Побач з праграмай: папка THIRD_PARTY_LICENSES/, файл THIRD_PARTY_COMPONENTS.json і файл THIRD_PARTY_NOTICES.md.",
 		"credits.subtitle": "Адкрытыя інструменты і людзі, на якіх абапіраецца NotLight",
 		"credits.title": "Падзякі",
 		"developer.diagnostics.audio_pipeline_line": "Аўдыя: актыўных плэераў {players} · падрыхтоўка {prepare} · загрузка форм хваль {waveform} · кэш форм хваль {cache} · этап {stage} · FFmpeg {ffmpeg} · запіс {voice} · імпартаў запісу {voice_jobs}",
@@ -714,7 +714,7 @@
 		"library.used": "Выкарыстоўваюцца",
 		"locale.name.be": "Беларуская",
 		"locale.name.en": "English",
-		"locale.name.ru": "Рускі",
+		"locale.name.ru": "Русский",
 		"locale.name.uk": "Українська",
 		"localization.fallback_error": "Не ўдалося загрузіць убудаваны рэзервовы слоўнік інтэрфейсу.",
 		"modules.board.close_live": "Закрыць інтэрактыўны рэжым",
@@ -2093,6 +2093,7 @@
 		"settings.storage.board_invalid": "Пашкоджаная або няпоўная дошка: %s",
 		"settings.storage.not_writable": "Няма доступу на запіс у папку: %s",
 		"runtime.data.board_repository.external_root_missing": "Наладжанае сховішча дошак недаступнае: %s",
-		"settings.storage.cleanup_failed": "Новае сховішча ўжо актывавана, але старыя даныя не ўдалося выдаліць: %s. Яны пакінуты як бяспечная рэзервовая копія; пасля праверкі новага месца іх можна выдаліць уручную."
+		"settings.storage.cleanup_failed": "Новае сховішча ўжо актывавана, але старыя даныя не ўдалося выдаліць: %s. Яны пакінуты як бяспечная рэзервовая копія; пасля праверкі новага месца іх можна выдаліць уручную.",
+		"settings.storage.cleanup_pending": "Міграцыя «{kind}» ужо актываваная, але старое сховішча пакуль не ўдалося выдаліць. NotLight паўторыць бяспечную ачыстку пры наступным запуску; новае сховішча застаецца асноўным."
 	}
 }

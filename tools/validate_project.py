@@ -1743,7 +1743,7 @@ def validate() -> list[str]:
 
     settings_text = (ROOT / "scripts/settings/app_settings_store.gd").read_text(encoding="utf-8")
     for required_term in (
-        "SETTINGS_SCHEMA_VERSION: int = 19",
+        "SETTINGS_SCHEMA_VERSION: int = 20",
         "WindowModePreference",
         "PerformanceProfile",
         "get_performance_budget",
@@ -2977,17 +2977,19 @@ def main() -> int:
     else:
         ambient_text = ambient_layer_path.read_text(encoding="utf-8")
         for required_term in (
-            "MOUSE_FILTER_IGNORE", "PHRASE_KEYS", "NotLightL10n.text(key)",
+            "MOUSE_FILTER_IGNORE", "PHRASE_KEYS", "NotLightL10n.text_for_locale(locale, key)",
+            "const PRIMARY_LOCALE_SHARE: float = 0.58", "_rng.randf() < PRIMARY_LOCALE_SHARE",
             "_build_spread_slots", "SPREAD_CANDIDATE_MULTIPLIER",
             "min_distance_squared", "_phrase_colors",
         ):
             if required_term not in ambient_text:
                 fail(f"Hub ambient phrase centralized-localization contract is missing: {required_term}", failures)
-        ru_bundle = json.loads((ROOT / "localization/core/ru.json").read_text(encoding="utf-8"))
-        ru_strings = ru_bundle.get("strings", {}) if isinstance(ru_bundle, dict) else {}
-        ambient_keys = [key for key in ru_strings if str(key).startswith("ambient.phrase.")]
-        if len(ambient_keys) < 40:
-            fail("Russian Hub ambient phrases must live in the centralized core catalog", failures)
+        for locale_name in ("ru", "be", "en", "uk"):
+            locale_bundle = json.loads((ROOT / f"localization/core/{locale_name}.json").read_text(encoding="utf-8"))
+            locale_strings = locale_bundle.get("strings", {}) if isinstance(locale_bundle, dict) else {}
+            ambient_keys = [key for key in locale_strings if str(key).startswith("ambient.phrase.")]
+            if len(ambient_keys) < 40:
+                fail(f"{locale_name} Hub ambient phrases must live in the centralized core catalog", failures)
 
 
     pdf_paths = (
@@ -4489,7 +4491,7 @@ def main() -> int:
             if required_term not in stage119_preview:
                 fail(f"Stage 11.9 bounded Notes media budget contract is missing: {required_term}", failures)
         for required_term in (
-            "const SETTINGS_SCHEMA_VERSION: int = 19",
+            "const SETTINGS_SCHEMA_VERSION: int = 20",
             "const MAX_NOTE_EMBED_LIVE_MEDIA: int = 64",
             "custom_note_embed_rich_preview",
         ):

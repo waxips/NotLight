@@ -224,8 +224,8 @@
 		"common.show_more_remaining": "Show more · {count} remaining",
 		"common.unavailable": "Unavailable",
 		"common.yes": "yes",
-		"credits.body": "NotLight uses many open-source projects and tools created by other people. Thanks to their authors and everyone who continues to develop and maintain them.\n\nBelow are the main projects used in NotLight:\n\n• Godot Engine\n• FFmpeg\n• Poppler\n• Typst\n• qpdf\n• MiTeX\n\nFull license texts, attribution information, and other required notices can be found alongside the distribution in [b]THIRD_PARTY_LICENSES[/b] and [b]THIRD_PARTY_NOTICES.md[/b].",
-		"credits.license_note": "Third-party licenses and legal notices remain in THIRD_PARTY_LICENSES and THIRD_PARTY_NOTICES.md.",
+		"credits.body": "NotLight uses many open-source projects and tools created by other people. Thanks to their authors and everyone who continues to develop and maintain them.\n\nBelow are the main projects used in NotLight:\n\n• Godot Engine\n• FFmpeg\n• Poppler\n• Typst\n• qpdf\n• MiTeX\n\nFull license texts are in the [b]THIRD_PARTY_LICENSES/[/b] folder, the component inventory is in [b]THIRD_PARTY_COMPONENTS.json[/b], and attribution/legal notices are in [b]THIRD_PARTY_NOTICES.md[/b] alongside the distribution.",
+		"credits.license_note": "Alongside the app: the THIRD_PARTY_LICENSES/ folder, THIRD_PARTY_COMPONENTS.json, and THIRD_PARTY_NOTICES.md.",
 		"credits.subtitle": "Open tools and people NotLight builds on",
 		"credits.title": "Credits",
 		"developer.diagnostics.audio_pipeline_line": "Audio: active players {players} · preparation {prepare} · waveform loads {waveform} · waveform cache {cache} · stage {stage} · FFmpeg {ffmpeg} · recording {voice} · voice imports {voice_jobs}",
@@ -2093,6 +2093,7 @@
 		"settings.storage.board_invalid": "A board is damaged or incomplete: %s",
 		"settings.storage.not_writable": "The folder is not writable: %s",
 		"runtime.data.board_repository.external_root_missing": "Configured board storage is unavailable: %s",
-		"settings.storage.cleanup_failed": "The new storage location is already active, but the old data could not be removed: %s. It was kept as a safety backup; you can delete it manually after checking the new location."
+		"settings.storage.cleanup_failed": "The new storage location is already active, but the old data could not be removed: %s. It was kept as a safety backup; you can delete it manually after checking the new location.",
+		"settings.storage.cleanup_pending": "The “{kind}” migration is already active, but the old storage could not be removed yet. NotLight will retry safe cleanup on the next launch; the new storage remains primary."
 	}
 }

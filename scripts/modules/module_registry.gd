@@ -292,7 +292,13 @@ func finalize_prepared_external_modules() -> Dictionary:
 	if not _prepared_external_fingerprint.is_empty() and current_fingerprint != _prepared_external_fingerprint:
 		return {"ok": false, "error": NotLightL10n.text("settings.storage.destination_changed")}
 	if _prepared_external_adopt_existing:
-		return {"ok": true, "root": destination, "changed": true, "adopted": true}
+		return {
+			"ok": true,
+			"root": destination,
+			"changed": true,
+			"adopted": true,
+			"proof": current_fingerprint,
+		}
 	var parent: String = destination.get_base_dir()
 	var writable_error: String = _probe_writable_directory(parent)
 	if not writable_error.is_empty():
@@ -300,6 +306,16 @@ func finalize_prepared_external_modules() -> Dictionary:
 	var token: String = AssetId.make_temporary_id("modules-finalize")
 	var staging: String = parent.path_join(".notlight_modules_finalize_%s" % token)
 	var backup: String = parent.path_join(".notlight_modules_previous_%s" % token)
+	# Materialize the staging root before copying. An empty Module Library has no
+	# copyable entries (the root-level .staging directory is intentionally ignored),
+	# so _copy_directory_tree_verified() can legitimately copy zero entries and
+	# otherwise leave `staging` nonexistent. Verification must compare two existing
+	# directory roots even when both effective trees are empty.
+	if DirAccess.dir_exists_absolute(staging):
+		if not _delete_directory_recursive_absolute(staging):
+			return {"ok": false, "error": NotLightL10n.text("settings.storage.prepare_modules_failed")}
+	if DirAccess.make_dir_recursive_absolute(staging) != OK:
+		return {"ok": false, "error": NotLightL10n.text("settings.storage.prepare_modules_failed")}
 	var copy_result: Dictionary = _copy_directory_tree_verified(source_root, staging, 0)
 	if not bool(copy_result.get("ok", false)):
 		_delete_directory_recursive_absolute(staging)
@@ -324,23 +340,77 @@ func finalize_prepared_external_modules() -> Dictionary:
 	if had_destination:
 		_delete_directory_recursive_absolute(backup)
 	_prepared_external_fingerprint = _directory_tree_fingerprint(destination, 0)
-	return {"ok": true, "root": destination, "changed": true}
+	return {
+		"ok": true,
+		"root": destination,
+		"changed": true,
+		"proof": _prepared_external_fingerprint,
+	}
 
 
 func cleanup_migrated_external_modules_source() -> Dictionary:
+	# Compatibility wrapper for the direct storage smoke test. The durable app path
+	# calls cleanup_migrated_module_source() with persisted source/target/proof.
 	if _prepared_external_root.is_empty() or _prepared_external_adopt_existing:
 		return {"ok": true, "removed": false}
 	var source_root: String = ProjectSettings.globalize_path(_root_dir).simplify_path()
 	var destination: String = _prepared_external_root.simplify_path()
-	if _storage_path_key(source_root) == _storage_path_key(destination):
-		return {"ok": true, "removed": false}
-	if _path_is_inside(destination, source_root) or _path_is_inside(source_root, destination):
-		return {"ok": false, "error": NotLightL10n.text("settings.storage.overlap_error")}
-	if not DirAccess.dir_exists_absolute(destination) or _directory_tree_fingerprint(destination, 0).is_empty():
-		return {"ok": false, "error": NotLightL10n.text("settings.storage.existing_invalid") % destination}
-	if DirAccess.dir_exists_absolute(source_root) and not _delete_directory_recursive_absolute(source_root):
-		return {"ok": false, "error": NotLightL10n.text("settings.storage.cleanup_failed") % source_root}
-	return {"ok": true, "removed": true, "source": source_root}
+	var cleaned: bool = cleanup_migrated_module_source(
+		source_root,
+		destination,
+		_prepared_external_fingerprint
+	)
+	return {
+		"ok": cleaned,
+		"removed": cleaned,
+		"source": source_root,
+		"error": "" if cleaned else NotLightL10n.text("settings.storage.cleanup_failed") % source_root,
+	}
+
+
+func cleanup_migrated_module_source(source_root: String, destination_root: String, expected_proof: String = "") -> bool:
+	var source: String = _globalized_storage_root(source_root)
+	var destination: String = _globalized_storage_root(destination_root)
+	if source.is_empty() or destination.is_empty():
+		return false
+	if _storage_path_key(source) == _storage_path_key(destination):
+		return true
+	if _path_is_inside(destination, source) or _path_is_inside(source, destination):
+		return false
+	var destination_fingerprint: String = _directory_tree_fingerprint(destination, 0)
+	if destination_fingerprint.is_empty():
+		return false
+	var proof: String = expected_proof.strip_edges().to_lower()
+	if not proof.is_empty():
+		if proof.length() != 64 or destination_fingerprint != proof:
+			return false
+	elif _directory_tree_fingerprint(source, 0) != destination_fingerprint:
+		return false
+
+	# Remove only Module Library-owned entries. Valid module IDs and .staging are
+	# app-owned; unrelated sibling files in an unusual historical root are kept.
+	if DirAccess.dir_exists_absolute(source):
+		for entry: String in DirAccess.get_directories_at(source):
+			if entry == ".staging" or ModuleManifest.is_valid_module_id(entry):
+				if not _delete_directory_recursive_absolute(source.path_join(entry)):
+					return false
+		if _directory_is_empty_absolute(source):
+			DirAccess.remove_absolute(source)
+	if not DirAccess.dir_exists_absolute(source):
+		return true
+	for entry: String in DirAccess.get_directories_at(source):
+		if entry == ".staging" or ModuleManifest.is_valid_module_id(entry):
+			return false
+	return true
+
+
+func _globalized_storage_root(value: String) -> String:
+	var clean: String = value.strip_edges()
+	if clean.is_empty():
+		return ""
+	if clean.begins_with("user://") or clean.begins_with("res://"):
+		clean = ProjectSettings.globalize_path(clean)
+	return clean.simplify_path()
 
 
 func mark_prepared_external_modules_activated() -> void:

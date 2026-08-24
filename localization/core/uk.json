@@ -224,8 +224,8 @@
 		"common.show_more_remaining": "Показати ще · залишилось {count}",
 		"common.unavailable": "Недоступно",
 		"common.yes": "так",
-		"credits.body": "NotLight використовує багато відкритих проєктів та інструментів, створених іншими людьми. Дякую їхнім авторам і всім, хто продовжує їх розвивати та підтримувати.\n\nНижче перелічено основні проєкти, які використовуються в NotLight:\n\n• Godot Engine\n• FFmpeg\n• Poppler\n• Typst\n• qpdf\n• MiTeX\n\nПовні тексти ліцензій, відомості про авторів та інші необхідні повідомлення знаходяться поруч із дистрибутивом у [b]THIRD_PARTY_LICENSES[/b] та [b]THIRD_PARTY_NOTICES.md[/b].",
-		"credits.license_note": "Ліцензії сторонніх компонентів і юридичні повідомлення залишаються в THIRD_PARTY_LICENSES і THIRD_PARTY_NOTICES.md.",
+		"credits.body": "NotLight використовує багато відкритих проєктів та інструментів, створених іншими людьми. Дякую їхнім авторам і всім, хто продовжує їх розвивати та підтримувати.\n\nНижче перелічено основні проєкти, які використовуються в NotLight:\n\n• Godot Engine\n• FFmpeg\n• Poppler\n• Typst\n• qpdf\n• MiTeX\n\nПовні тексти ліцензій містяться в папці [b]THIRD_PARTY_LICENSES/[/b], список сторонніх компонентів — у [b]THIRD_PARTY_COMPONENTS.json[/b], а відомості про авторів та обов’язкові повідомлення — у [b]THIRD_PARTY_NOTICES.md[/b] поруч із застосунком.",
+		"credits.license_note": "Поруч із застосунком: папка THIRD_PARTY_LICENSES/, файл THIRD_PARTY_COMPONENTS.json і файл THIRD_PARTY_NOTICES.md.",
 		"credits.subtitle": "Відкриті інструменти й люди, на яких спирається NotLight",
 		"credits.title": "Подяки",
 		"developer.diagnostics.audio_pipeline_line": "Аудіо: активних плеєрів {players} · підготовка {prepare} · завантаження форм хвиль {waveform} · кеш форм хвиль {cache} · етап {stage} · FFmpeg {ffmpeg} · запис {voice} · імпортів запису {voice_jobs}",
@@ -2093,6 +2093,7 @@
 		"settings.storage.board_invalid": "Пошкоджена або неповна дошка: %s",
 		"settings.storage.not_writable": "Немає доступу на запис до папки: %s",
 		"runtime.data.board_repository.external_root_missing": "Налаштоване сховище дощок недоступне: %s",
-		"settings.storage.cleanup_failed": "Нове сховище вже активовано, але старі дані не вдалося видалити: %s. Їх залишено як безпечну резервну копію; після перевірки нового місця їх можна видалити вручну."
+		"settings.storage.cleanup_failed": "Нове сховище вже активовано, але старі дані не вдалося видалити: %s. Їх залишено як безпечну резервну копію; після перевірки нового місця їх можна видалити вручну.",
+		"settings.storage.cleanup_pending": "Міграцію «{kind}» уже активовано, але старе сховище поки не вдалося видалити. NotLight повторить безпечне очищення під час наступного запуску; нове сховище лишається основним."
 	}
 }

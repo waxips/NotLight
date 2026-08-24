@@ -224,8 +224,8 @@
 		"common.show_more_remaining": "Показать ещё · осталось {count}",
 		"common.unavailable": "Недоступно",
 		"common.yes": "да",
-		"credits.body": "NotLight использует много открытых проектов и инструментов, созданных другими людьми. Спасибо их авторам и всем, кто продолжает их развивать и поддерживать.\n\nНиже перечислены основные проекты, которые используются в NotLight:\n\n• Godot Engine\n• FFmpeg\n• Poppler\n• Typst\n• qpdf\n• MiTeX\n\nПолные тексты лицензий, сведения об авторах и другие необходимые уведомления находятся рядом с дистрибутивом в [b]THIRD_PARTY_LICENSES[/b] и [b]THIRD_PARTY_NOTICES.md[/b].",
-		"credits.license_note": "Лицензии сторонних компонентов и юридические уведомления остаются в THIRD_PARTY_LICENSES и THIRD_PARTY_NOTICES.md.",
+		"credits.body": "NotLight использует много открытых проектов и инструментов, созданных другими людьми. Спасибо их авторам и всем, кто продолжает их развивать и поддерживать.\n\nНиже перечислены основные проекты, которые используются в NotLight:\n\n• Godot Engine\n• FFmpeg\n• Poppler\n• Typst\n• qpdf\n• MiTeX\n\nПолные тексты лицензий находятся в папке [b]THIRD_PARTY_LICENSES/[/b], список сторонних компонентов — в [b]THIRD_PARTY_COMPONENTS.json[/b], а сведения об авторах и обязательные уведомления — в [b]THIRD_PARTY_NOTICES.md[/b] рядом с приложением.",
+		"credits.license_note": "Рядом с приложением: папка THIRD_PARTY_LICENSES/, файл THIRD_PARTY_COMPONENTS.json и файл THIRD_PARTY_NOTICES.md.",
 		"credits.subtitle": "Открытые инструменты и люди, на которых опирается NotLight",
 		"credits.title": "Благодарности",
 		"developer.diagnostics.audio_pipeline_line": "Аудио: активных плееров {players} · подготовка {prepare} · загрузка форм волн {waveform} · кэш форм волн {cache} · этап {stage} · FFmpeg {ffmpeg} · запись {voice} · импортов записи {voice_jobs}",
@@ -2093,6 +2093,7 @@
 		"settings.storage.board_invalid": "Повреждена или неполна доска: %s",
 		"settings.storage.not_writable": "Нет доступа на запись в папку: %s",
 		"runtime.data.board_repository.external_root_missing": "Настроенное хранилище досок недоступно: %s",
-		"settings.storage.cleanup_failed": "Новое хранилище уже активировано, но не удалось удалить старые данные: %s. Они оставлены как безопасная резервная копия; их можно удалить вручную после проверки нового места."
+		"settings.storage.cleanup_failed": "Новое хранилище уже активировано, но не удалось удалить старые данные: %s. Они оставлены как безопасная резервная копия; их можно удалить вручную после проверки нового места.",
+		"settings.storage.cleanup_pending": "Миграция «{kind}» уже активирована, но старое хранилище пока не удалось удалить. NotLight повторит безопасную очистку при следующем запуске; новое хранилище остаётся основным."
 	}
 }

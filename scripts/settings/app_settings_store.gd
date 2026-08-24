@@ -44,7 +44,7 @@ signal settings_changed(settings: Dictionary)
 signal settings_error(message: String)
 
 const SETTINGS_PATH: String = "user://notlight/settings.json"
-const SETTINGS_SCHEMA_VERSION: int = 19
+const SETTINGS_SCHEMA_VERSION: int = 20
 const DEFAULT_CAMERA_SENSITIVITY: float = 1.0
 const DEFAULT_ZOOM_SENSITIVITY: float = 1.0
 const DEFAULT_CAMERA_SPEED: float = 9.5
@@ -139,6 +139,7 @@ var custom_drawing_quality: DrawingQuality = DrawingQuality.HIGH
 var board_root: String = DEFAULT_BOARD_ROOT
 var library_root: String = DEFAULT_LIBRARY_ROOT
 var module_root: String = DEFAULT_MODULE_ROOT
+var pending_storage_cleanup: Dictionary = {}
 var compression_cpu_mode: CompressionCpuMode = CompressionCpuMode.ECO
 var auto_optimize_video: bool = false
 
@@ -235,6 +236,10 @@ func _migrate_settings_dictionary(source: Dictionary) -> Dictionary:
 	# discovery adopts an older NotLight Board directory at startup.
 	if source_version < 19 and not migrated.has("board_root"):
 		migrated["board_root"] = DEFAULT_BOARD_ROOT
+	# v20 persists crash-safe cleanup work for storage moves. The active target
+	# and cleanup marker are saved together before the previous source is removed.
+	if source_version < 20 and not migrated.has("pending_storage_cleanup"):
+		migrated["pending_storage_cleanup"] = {}
 	migrated["schema_version"] = SETTINGS_SCHEMA_VERSION
 	return migrated
 
@@ -294,6 +299,7 @@ func get_snapshot() -> Dictionary:
 		"board_root": board_root,
 		"library_root": library_root,
 		"module_root": module_root,
+		"pending_storage_cleanup": pending_storage_cleanup.duplicate(true),
 		"compression_cpu_mode": int(compression_cpu_mode),
 		"auto_optimize_video": auto_optimize_video,
 	}
@@ -803,6 +809,63 @@ func set_module_root(value: String) -> void:
 	_commit_change()
 
 
+func begin_storage_migration(kind: String, source_root: String, target_root: String, proof: String = "") -> bool:
+	var clean_kind: String = kind.strip_edges().to_lower()
+	if not PackedStringArray(["boards", "library", "modules"]).has(clean_kind):
+		return false
+	# Never overwrite an older cleanup retry for the same storage kind. The user
+	# can retry/finish that cleanup on restart before starting another move.
+	if pending_storage_cleanup.has(clean_kind):
+		return false
+	var clean_source: String = source_root.strip_edges()
+	var clean_target: String = target_root.strip_edges()
+	if clean_source.is_empty() or clean_target.is_empty() or clean_source == clean_target:
+		return false
+	match clean_kind:
+		"boards":
+			board_root = clean_target
+		"library":
+			library_root = clean_target
+		"modules":
+			module_root = clean_target
+	pending_storage_cleanup[clean_kind] = {
+		"source": clean_source,
+		"target": clean_target,
+		"proof": proof.strip_edges().to_lower(),
+	}
+	_commit_change()
+	return true
+
+
+func get_pending_storage_cleanup(kind: String) -> Dictionary:
+	var clean_kind: String = kind.strip_edges().to_lower()
+	var raw: Variant = pending_storage_cleanup.get(clean_kind, {})
+	return (raw as Dictionary).duplicate(true) if raw is Dictionary else {}
+
+
+func restore_storage_migration_state(
+	board_value: String,
+	library_value: String,
+	module_value: String,
+	pending_value: Dictionary
+) -> void:
+	# Used only when persisting a newly activated migration fails. Restore the exact
+	# previous durable roots and pending cleanup state so no older retry is lost.
+	board_root = board_value.strip_edges() if not board_value.strip_edges().is_empty() else DEFAULT_BOARD_ROOT
+	library_root = library_value.strip_edges() if not library_value.strip_edges().is_empty() else DEFAULT_LIBRARY_ROOT
+	module_root = module_value.strip_edges() if not module_value.strip_edges().is_empty() else DEFAULT_MODULE_ROOT
+	pending_storage_cleanup = _sanitize_pending_storage_cleanup(pending_value)
+	_commit_change()
+
+
+func complete_storage_migration(kind: String) -> void:
+	var clean_kind: String = kind.strip_edges().to_lower()
+	if not pending_storage_cleanup.has(clean_kind):
+		return
+	pending_storage_cleanup.erase(clean_kind)
+	_commit_change()
+
+
 func set_compression_cpu_mode(value: int) -> void:
 	var normalized: CompressionCpuMode = CompressionCpuMode.ECO
 	if value == int(CompressionCpuMode.BALANCED):
@@ -905,6 +968,7 @@ func reset_defaults(save_changes: bool = true, preserve_performance: bool = fals
 	var preserved_board_root: String = board_root
 	var preserved_library_root: String = library_root
 	var preserved_module_root: String = module_root
+	var preserved_pending_storage_cleanup: Dictionary = pending_storage_cleanup.duplicate(true)
 	var preserved_profile: PerformanceProfile = performance_profile
 	var preserved_board_budget: int = custom_board_object_budget
 	var preserved_ui_budget: int = custom_materialized_ui_budget
@@ -979,6 +1043,7 @@ func reset_defaults(save_changes: bool = true, preserve_performance: bool = fals
 	board_root = preserved_board_root if save_changes else DEFAULT_BOARD_ROOT
 	library_root = preserved_library_root if save_changes else DEFAULT_LIBRARY_ROOT
 	module_root = preserved_module_root if save_changes else DEFAULT_MODULE_ROOT
+	pending_storage_cleanup = preserved_pending_storage_cleanup if save_changes else {}
 	compression_cpu_mode = CompressionCpuMode.ECO
 	auto_optimize_video = false
 	NotLightL10n.set_locale(locale)
@@ -1323,6 +1388,7 @@ func _apply_dictionary(source: Dictionary) -> void:
 	module_root = str(source.get("module_root", DEFAULT_MODULE_ROOT)).strip_edges()
 	if module_root.is_empty():
 		module_root = DEFAULT_MODULE_ROOT
+	pending_storage_cleanup = _sanitize_pending_storage_cleanup(source.get("pending_storage_cleanup", {}))
 	var raw_cpu_mode: int = int(source.get("compression_cpu_mode", int(CompressionCpuMode.ECO)))
 	compression_cpu_mode = CompressionCpuMode.ECO
 	if raw_cpu_mode == int(CompressionCpuMode.BALANCED):
@@ -1331,6 +1397,27 @@ func _apply_dictionary(source: Dictionary) -> void:
 		compression_cpu_mode = CompressionCpuMode.MAXIMUM
 	auto_optimize_video = bool(source.get("auto_optimize_video", false))
 
+
+
+func _sanitize_pending_storage_cleanup(value: Variant) -> Dictionary:
+	var result: Dictionary = {}
+	if value is not Dictionary:
+		return result
+	var raw_dictionary: Dictionary = value as Dictionary
+	for kind: String in ["boards", "library", "modules"]:
+		var raw_entry: Variant = raw_dictionary.get(kind, {})
+		if raw_entry is not Dictionary:
+			continue
+		var entry: Dictionary = raw_entry as Dictionary
+		var source_root: String = str(entry.get("source", "")).strip_edges()
+		var target_root: String = str(entry.get("target", "")).strip_edges()
+		var proof: String = str(entry.get("proof", "")).strip_edges().to_lower()
+		if source_root.is_empty() or target_root.is_empty() or source_root == target_root:
+			continue
+		if not proof.is_empty() and proof.length() != 64:
+			continue
+		result[kind] = {"source": source_root, "target": target_root, "proof": proof}
+	return result
 
 
 func _sanitize_background_music_track(value: String) -> String:

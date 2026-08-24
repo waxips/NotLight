@@ -69,7 +69,7 @@ const MIN_DRIFT_AMPLITUDE: float = 7.0
 const MAX_DRIFT_AMPLITUDE: float = 18.0
 const MIN_DRIFT_PERIOD_SECONDS: float = 18.0
 const MAX_DRIFT_PERIOD_SECONDS: float = 38.0
-const PRIMARY_LOCALE_SHARE: float = 0.84
+const PRIMARY_LOCALE_SHARE: float = 0.58
 
 var _rng: RandomNumberGenerator = RandomNumberGenerator.new()
 var _phrases_by_locale: Dictionary = {}
@@ -120,13 +120,14 @@ func _process(delta: float) -> void:
 func _load_phrases() -> void:
 	_phrases_by_locale.clear()
 	_phrase_colors = PackedColorArray()
-	var russian: Array[String] = []
-	for key: String in PHRASE_KEYS:
-		var phrase: String = NotLightL10n.text(key).strip_edges()
-		if not phrase.is_empty() and phrase != key:
-			russian.append(phrase)
-	if not russian.is_empty():
-		_phrases_by_locale["ru"] = russian
+	for locale: String in NotLightL10n.available_locales():
+		var localized_phrases: Array[String] = []
+		for key: String in PHRASE_KEYS:
+			var phrase: String = NotLightL10n.text_for_locale(locale, key).strip_edges()
+			if not phrase.is_empty() and phrase != key:
+				localized_phrases.append(phrase)
+		if not localized_phrases.is_empty():
+			_phrases_by_locale[locale] = localized_phrases
 	for color: Color in PHRASE_COLORS:
 		_phrase_colors.append(color)
 
@@ -165,10 +166,8 @@ func _build_phrase_choices(target_count: int) -> Array[Dictionary]:
 		available_locales.append(str(raw_locale))
 	if available_locales.is_empty():
 		return result
-	var has_primary: bool = _phrases_by_locale.has(current_locale)
-	var primary_count: int = int(round(float(target_count) * PRIMARY_LOCALE_SHARE)) if has_primary else 0
-	for index: int in range(target_count):
-		var locale: String = current_locale if index < primary_count else _random_secondary_locale(current_locale, available_locales)
+	for _index: int in range(target_count):
+		var locale: String = _choose_phrase_locale(current_locale, available_locales)
 		if not _phrases_by_locale.has(locale):
 			locale = available_locales[_rng.randi_range(0, available_locales.size() - 1)]
 		var pool_value: Variant = _phrases_by_locale.get(locale, [])
@@ -191,6 +190,14 @@ func _build_phrase_choices(target_count: int) -> Array[Dictionary]:
 	# probability/coverage, not position on screen.
 	result.shuffle()
 	return result
+
+
+func _choose_phrase_locale(primary: String, available_locales: Array[String]) -> String:
+	if available_locales.is_empty():
+		return ""
+	if _phrases_by_locale.has(primary) and (available_locales.size() == 1 or _rng.randf() < PRIMARY_LOCALE_SHARE):
+		return primary
+	return _random_secondary_locale(primary, available_locales)
 
 
 func _random_secondary_locale(primary: String, available_locales: Array[String]) -> String:

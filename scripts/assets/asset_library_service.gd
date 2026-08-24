@@ -598,7 +598,13 @@ func finalize_prepared_external_library() -> Dictionary:
 	if not _prepared_external_catalog_sha256.is_empty() and current_hash != _prepared_external_catalog_sha256:
 		return {"ok": false, "error": NotLightL10n.text("settings.storage.destination_changed")}
 	if _prepared_external_adopt_existing:
-		return {"ok": true, "root": destination, "changed": true, "adopted": true}
+		return {
+			"ok": true,
+			"root": destination,
+			"changed": true,
+			"adopted": true,
+			"proof": current_hash,
+		}
 	var parent: String = destination.get_base_dir()
 	var writable_error: String = _probe_writable_directory(parent)
 	if not writable_error.is_empty():
@@ -606,6 +612,15 @@ func finalize_prepared_external_library() -> Dictionary:
 	var token: String = AssetId.make_temporary_id("library-finalize")
 	var staging: String = parent.path_join(".notlight_library_finalize_%s" % token)
 	var backup: String = parent.path_join(".notlight_library_previous_%s" % token)
+	# Materialize the finalization staging root explicitly. A Resource Library with
+	# no user assets still has catalog/layout metadata, but finalization must not
+	# depend on directory enumeration order to create the staging parent before a
+	# file copy. This also keeps the empty-library path symmetric with prepare().
+	if DirAccess.dir_exists_absolute(staging):
+		if not _delete_directory_absolute(staging):
+			return {"ok": false, "error": NotLightL10n.text("settings.storage.prepare_failed")}
+	if DirAccess.make_dir_recursive_absolute(staging) != OK:
+		return {"ok": false, "error": NotLightL10n.text("settings.storage.prepare_failed")}
 	var copy_result: Dictionary = _copy_directory_tree(source_root, staging)
 	if not bool(copy_result.get("ok", false)):
 		_delete_directory_absolute(staging)
@@ -632,24 +647,86 @@ func finalize_prepared_external_library() -> Dictionary:
 	if had_destination:
 		_delete_directory_absolute(backup)
 	_prepared_external_catalog_sha256 = FileAccess.get_sha256(destination_catalog).to_lower()
-	return {"ok": true, "root": destination, "changed": true}
+	return {
+		"ok": true,
+		"root": destination,
+		"changed": true,
+		"proof": _prepared_external_catalog_sha256,
+	}
 
 
 func cleanup_migrated_external_library_source() -> Dictionary:
+	# Compatibility wrapper for the direct smoke test. The app uses the durable
+	# cleanup function below so a failed delete can be retried after restart.
 	if _prepared_external_root.is_empty() or _prepared_external_adopt_existing:
 		return {"ok": true, "removed": false}
 	var source_root: String = ProjectSettings.globalize_path(_root_dir).simplify_path()
 	var destination: String = _prepared_external_root.simplify_path()
-	if _storage_path_key(source_root) == _storage_path_key(destination):
-		return {"ok": true, "removed": false}
-	if _path_is_inside(destination, source_root) or _path_is_inside(source_root, destination):
-		return {"ok": false, "error": NotLightL10n.text("settings.storage.overlap_error")}
-	var validation: Dictionary = _validate_library_snapshot(destination)
-	if not bool(validation.get("ok", false)):
-		return {"ok": false, "error": NotLightL10n.text("settings.storage.existing_invalid") % str(validation.get("error", destination))}
-	if DirAccess.dir_exists_absolute(source_root) and not _delete_directory_absolute(source_root):
-		return {"ok": false, "error": NotLightL10n.text("settings.storage.cleanup_failed") % source_root}
-	return {"ok": true, "removed": true, "source": source_root}
+	var cleaned: bool = cleanup_migrated_library_source(
+		source_root,
+		destination,
+		_prepared_external_catalog_sha256
+	)
+	return {
+		"ok": cleaned,
+		"removed": cleaned,
+		"source": source_root,
+		"error": "" if cleaned else NotLightL10n.text("settings.storage.cleanup_failed") % source_root,
+	}
+
+
+func cleanup_migrated_library_source(source_root: String, destination_root: String, expected_proof: String = "") -> bool:
+	var source: String = _globalized_storage_root(source_root)
+	var destination: String = _globalized_storage_root(destination_root)
+	if source.is_empty() or destination.is_empty():
+		return false
+	if _storage_path_key(source) == _storage_path_key(destination):
+		return true
+	if _path_is_inside(destination, source) or _path_is_inside(source, destination):
+		return false
+	var destination_validation: Dictionary = _validate_library_snapshot(destination)
+	if not bool(destination_validation.get("ok", false)):
+		return false
+	var destination_catalog: String = destination.path_join(CATALOG_FILE)
+	var proof: String = expected_proof.strip_edges().to_lower()
+	if not proof.is_empty():
+		if proof.length() != 64 or FileAccess.get_sha256(destination_catalog).to_lower() != proof:
+			return false
+	else:
+		var source_catalog: String = source.path_join(CATALOG_FILE)
+		if not FileAccess.file_exists(source_catalog) or not _files_equal(source_catalog, destination_catalog):
+			return false
+
+	# Delete only Resource Library-owned entries. This keeps cleanup safe even if a
+	# historical/custom root has unrelated sibling files. The root itself is removed
+	# only when it becomes empty. Retrying after a partial delete is idempotent.
+	for directory_name: String in ["blobs", "cache", "tmp"]:
+		var owned_directory: String = source.path_join(directory_name)
+		if DirAccess.dir_exists_absolute(owned_directory) and not _delete_directory_absolute(owned_directory):
+			return false
+	for file_name: String in [CATALOG_FILE, "%s.bak" % CATALOG_FILE, "%s.tmp" % CATALOG_FILE]:
+		var owned_file: String = source.path_join(file_name)
+		if FileAccess.file_exists(owned_file) and DirAccess.remove_absolute(owned_file) != OK:
+			return false
+	if DirAccess.dir_exists_absolute(source) and _directory_is_empty_absolute(source):
+		DirAccess.remove_absolute(source)
+	return (
+		not DirAccess.dir_exists_absolute(source.path_join("blobs"))
+		and not DirAccess.dir_exists_absolute(source.path_join("cache"))
+		and not DirAccess.dir_exists_absolute(source.path_join("tmp"))
+		and not FileAccess.file_exists(source.path_join(CATALOG_FILE))
+		and not FileAccess.file_exists(source.path_join("%s.bak" % CATALOG_FILE))
+		and not FileAccess.file_exists(source.path_join("%s.tmp" % CATALOG_FILE))
+	)
+
+
+func _globalized_storage_root(value: String) -> String:
+	var clean: String = value.strip_edges()
+	if clean.is_empty():
+		return ""
+	if clean.begins_with("user://") or clean.begins_with("res://"):
+		clean = ProjectSettings.globalize_path(clean)
+	return clean.simplify_path()
 
 
 func mark_prepared_external_library_activated() -> void:

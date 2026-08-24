@@ -22,6 +22,11 @@ PLACEHOLDER_RE = re.compile(r'%(?:\d+\$)?[-+#0 ]*(?:\d+|\*)?(?:\.\d+)?[sdif]|\{[
 CYR_RE = re.compile(r'[А-Яа-яЁёІіЇїЄєЎў]')
 STRING_RE = re.compile(r'(["\'])(.*?)(?<!\\)\1')
 CYR_TEST_FIXTURE = "MW@#%&ЖШЩЮЫ"
+LEGAL_CREDITS_ARTIFACTS = (
+    "THIRD_PARTY_LICENSES/",
+    "THIRD_PARTY_COMPONENTS.json",
+    "THIRD_PARTY_NOTICES.md",
+)
 
 # Strings that are visual glyphs, machine identifiers, standard protocol/tool
 # names, file/format syntax, numeric presentation templates or unit notation.
@@ -203,6 +208,38 @@ def main() -> int:
     for key, value in russian.items():
         if not value.strip() or value.strip() == key:
             failures.append(f"ru key {key} has empty/technical value")
+
+    # Language-picker labels are endonyms: every UI locale must show each
+    # language in that language's own canonical name, independent of the current
+    # interface locale. This keeps the picker recognizable after switching UI.
+    locale_self_names = {
+        "ru": "Русский",
+        "be": "Беларуская",
+        "en": "English",
+        "uk": "Українська",
+    }
+    all_bundles = {"ru": russian, **optional_bundles}
+    for viewer_locale, bundle in sorted(all_bundles.items()):
+        for target_locale, self_name in locale_self_names.items():
+            key = f"locale.name.{target_locale}"
+            if bundle.get(key) != self_name:
+                failures.append(
+                    f"{viewer_locale} {key} must be the target language self-name {self_name!r}"
+                )
+
+    # Credits must name the legal artifacts that actually ship next to the app.
+    # The trailing slash intentionally disambiguates THIRD_PARTY_LICENSES/ as a
+    # directory rather than another documentation file.
+    for artifact in LEGAL_CREDITS_ARTIFACTS:
+        source_path = ROOT / artifact.rstrip("/")
+        if not source_path.exists():
+            failures.append(f"Credits legal artifact does not exist: {artifact}")
+    for locale, bundle in sorted(all_bundles.items()):
+        for key in ("credits.body", "credits.license_note"):
+            value = bundle.get(key, "")
+            for artifact in LEGAL_CREDITS_ARTIFACTS:
+                if artifact not in value:
+                    failures.append(f"{locale} {key} does not name release artifact {artifact}")
 
     referenced = used_keys()
     missing = sorted(referenced - set(russian))

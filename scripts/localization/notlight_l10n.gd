@@ -76,8 +76,8 @@ static func available_locales() -> Array[String]:
 
 
 static func locale_label(locale: String) -> String:
-	var normalized: String = _normalize_locale(locale)
-	return text("locale.name.%s" % normalized)
+	var normalized: String = _normalize_supported_locale(locale)
+	return text_for_locale(normalized, "locale.name.%s" % normalized)
 
 
 static func current_locale() -> String:
@@ -106,6 +106,20 @@ static func text(key: String, values: Dictionary = {}) -> String:
 		translated = _lookup_core(clean_key, DEFAULT_LOCALE)
 	# A technical localization key is the last-resort diagnostic only. Under a
 	# normal packaged/editor run the Russian bundle is guaranteed by validation.
+	if translated.is_empty():
+		translated = clean_key
+	return translated.format(values) if not values.is_empty() else translated
+
+
+static func text_for_locale(locale: String, key: String, values: Dictionary = {}) -> String:
+	var clean_key: String = key.strip_edges()
+	if clean_key.is_empty():
+		return ""
+	_ensure_core_loaded(false)
+	var normalized: String = _normalize_supported_locale(locale)
+	var translated: String = _lookup_core(clean_key, normalized)
+	if translated.is_empty():
+		translated = _lookup_core(clean_key, DEFAULT_LOCALE)
 	if translated.is_empty():
 		translated = clean_key
 	return translated.format(values) if not values.is_empty() else translated

@@ -460,7 +460,13 @@ func finalize_prepared_external_boards() -> Dictionary:
 	if not _prepared_external_fingerprint.is_empty() and current_fingerprint != _prepared_external_fingerprint:
 		return {"ok": false, "error": NotLightL10n.text("settings.storage.destination_changed")}
 	if _prepared_external_adopt_existing:
-		return {"ok": true, "root": destination, "changed": true, "adopted": true}
+		return {
+			"ok": true,
+			"root": destination,
+			"changed": true,
+			"adopted": true,
+			"proof": current_fingerprint,
+		}
 
 	var parent: String = destination.get_base_dir()
 	var writable_error: String = _probe_writable_directory(parent)
@@ -495,34 +501,74 @@ func finalize_prepared_external_boards() -> Dictionary:
 	if had_destination:
 		_delete_directory_recursive(backup)
 	_prepared_external_fingerprint = _board_storage_fingerprint(destination)
-	return {"ok": true, "root": destination, "changed": true, "copied_files": int(copied.get("files", 0))}
+	return {
+		"ok": true,
+		"root": destination,
+		"changed": true,
+		"copied_files": int(copied.get("files", 0)),
+		"proof": _prepared_external_fingerprint,
+	}
 
 
 func cleanup_migrated_external_board_source() -> Dictionary:
+	# Compatibility wrapper used by the direct storage smoke test. The durable app
+	# path uses cleanup_migrated_board_source(), which can also resume after restart.
 	if _prepared_external_root.is_empty() or _prepared_external_adopt_existing:
 		return {"ok": true, "removed": false}
 	var source_root: String = _absolute_path(_root_dir).simplify_path()
 	var destination: String = _prepared_external_root.simplify_path()
-	if _storage_path_key(source_root) == _storage_path_key(destination):
-		return {"ok": true, "removed": false}
-	if _path_is_inside(destination, source_root) or _path_is_inside(source_root, destination):
-		return {"ok": false, "error": NotLightL10n.text("settings.storage.overlap_error")}
+	var cleaned: bool = cleanup_migrated_board_source(
+		source_root,
+		destination,
+		_prepared_external_fingerprint
+	)
+	return {
+		"ok": cleaned,
+		"removed": cleaned,
+		"source": source_root,
+		"error": "" if cleaned else NotLightL10n.text("settings.storage.cleanup_failed") % source_root,
+	}
+
+
+func cleanup_migrated_board_source(source_root: String, destination_root: String, expected_proof: String = "") -> bool:
+	# This function is deliberately independent of the in-memory prepared state so
+	# a cleanup marker persisted in settings.json can be retried after a restart.
+	var source: String = _absolute_path(source_root).simplify_path()
+	var destination: String = _absolute_path(destination_root).simplify_path()
+	if source.is_empty() or destination.is_empty():
+		return false
+	if _storage_path_key(source) == _storage_path_key(destination):
+		return true
+	if _path_is_inside(destination, source) or _path_is_inside(source, destination):
+		return false
 	var validation: Dictionary = _validate_board_storage_snapshot(destination)
 	if not bool(validation.get("ok", false)):
-		return {"ok": false, "error": NotLightL10n.text("settings.storage.existing_invalid") % str(validation.get("error", destination))}
-	# BoardRepository can use the historical .../notlight root, which may also
-	# contain sibling library/ and modules/ directories. Remove only files owned
-	# by board storage so migrating boards can never erase those siblings.
-	var source_boards: String = source_root.path_join("boards")
+		return false
+	var proof: String = expected_proof.strip_edges().to_lower()
+	if not proof.is_empty():
+		if proof.length() != 64 or _board_storage_fingerprint(destination) != proof:
+			return false
+	elif _board_storage_fingerprint(source) != _board_storage_fingerprint(destination):
+		return false
+
+	# A board root can be the historical user://notlight directory, which also
+	# contains settings/library/modules. Remove only BoardRepository-owned data.
+	# This is also safe for an explicitly adopted existing root with extra siblings.
+	var source_boards: String = source.path_join("boards")
 	if DirAccess.dir_exists_absolute(source_boards) and not _delete_directory_recursive(source_boards):
-		return {"ok": false, "error": NotLightL10n.text("settings.storage.cleanup_failed") % source_boards}
+		return false
 	for index_name: String in ["index.json", "index.json.bak", "index.json.tmp"]:
-		var source_index: String = source_root.path_join(index_name)
+		var source_index: String = source.path_join(index_name)
 		if FileAccess.file_exists(source_index) and DirAccess.remove_absolute(source_index) != OK:
-			return {"ok": false, "error": NotLightL10n.text("settings.storage.cleanup_failed") % source_index}
-	if DirAccess.dir_exists_absolute(source_root) and _directory_is_empty_absolute(source_root):
-		DirAccess.remove_absolute(source_root)
-	return {"ok": true, "removed": true, "source": source_root}
+			return false
+	if DirAccess.dir_exists_absolute(source) and _directory_is_empty_absolute(source):
+		DirAccess.remove_absolute(source)
+	return (
+		not DirAccess.dir_exists_absolute(source_boards)
+		and not FileAccess.file_exists(source.path_join("index.json"))
+		and not FileAccess.file_exists(source.path_join("index.json.bak"))
+		and not FileAccess.file_exists(source.path_join("index.json.tmp"))
+	)
 
 
 func mark_prepared_external_boards_activated() -> void:

@@ -80,6 +80,46 @@ def main() -> int:
         if path.is_file() and any(fragment in path.name.lower() for fragment in FORBIDDEN_MEDIA_FRAGMENTS):
             errors.append(f"forbidden/undocumented historical media filename: {rel.as_posix()}")
 
+    # A literal backslash-t at the beginning of a GDScript line is not
+    # indentation. It is an easy corruption for generated patches to introduce
+    # and Godot will reject it even if Python contract tests still pass.
+    for path in ROOT.rglob("*.gd"):
+        for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+            if line.startswith("\\t"):
+                rel = path.relative_to(ROOT).as_posix()
+                errors.append(f"literal \t indentation in GDScript: {rel}:{line_number}")
+
+    # Keep the canonical Windows artifact name synchronized across the actual
+    # build/package entry points. Negative assertions in validators are excluded
+    # deliberately; mentioning a legacy name in a guard is not a release drift.
+    release_name_files = (
+        "export_presets.cfg",
+        "README.md",
+        "RELEASE_COMPLIANCE.md",
+        "tools/build_windows.ps1",
+        "tools/make_windows_bootstrap_release.ps1",
+        "tools/release/START_NOTLIGHT.bat",
+        "tools/release/README_WINDOWS.txt",
+        "tools/release/00_START_HERE.txt",
+    )
+    for rel in release_name_files:
+        path = ROOT / rel
+        if path.is_file():
+            release_text = path.read_text(encoding="utf-8-sig")
+            if "NotLightBoard.exe" in release_text or "NotLightBoard.pck" in release_text:
+                errors.append(f"legacy release binary name remains in {rel}")
+
+    canonical_icon_uid = "uid://d0bxao48vk63o"
+    icon_import = ROOT / "icon.svg.import"
+    if not icon_import.is_file() or f'uid="{canonical_icon_uid}"' not in icon_import.read_text(encoding="utf-8"):
+        errors.append("canonical icon.svg UID is missing or changed")
+    project_text = (ROOT / "project.godot").read_text(encoding="utf-8")
+    preset_text = (ROOT / "export_presets.cfg").read_text(encoding="utf-8")
+    if f'config/icon="{canonical_icon_uid}"' not in project_text:
+        errors.append("project icon is not synchronized to icon.svg")
+    if f'application/icon="{canonical_icon_uid}"' not in preset_text:
+        errors.append("Windows export icon is not synchronized to icon.svg")
+
     inventory_path = ROOT / "THIRD_PARTY_COMPONENTS.json"
     inventory: dict = {}
     if inventory_path.is_file():
